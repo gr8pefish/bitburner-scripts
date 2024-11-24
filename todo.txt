@@ -1,0 +1,14 @@
+Misc:
+- 
+
+Scripts:
+- way better prep script (protobatch it)
+- improve xp script (w/ targets)
+- ram pool
+    - global instance w/ updates
+- more utils
+- better logging, logging class even
+
+- eventually formulas
+
+- types for string | Server, for autoconvert to name and pass in ram efficient type (whatever I have)

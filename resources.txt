@@ -1,0 +1,15 @@
+Useful resources:
+
+Guides:
+- https://github.com/quacksouls/bitwalk (&& https://github.com/quacksouls in general)
+- https://darktechnomancer.github.io/
+
+Example Repos:
+- https://github.com/bitburner-official/bitburner-scripts
+- https://github.com/xxxsinx/bitburner
+- https://github.com/alainbryden/bitburner-scripts/tree/main
+- https://github.com/bitburner-official/bitburner-src
+
+Other:
+- https://github.com/alexei/sprintf.js
+- https://github.com/shyguy1412/bb-external-editor
