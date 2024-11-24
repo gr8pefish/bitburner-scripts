@@ -100,6 +100,13 @@ export function updateServerRoots(ns: NS, serverList?: string[]) {
     }
 }
 
+/**
+ * Gets all server names, by default excludes home
+ * 
+ * @param ns 
+ * @param removeHome 
+ * @returns 
+ */
 export function getAllServers(ns: NS, removeHome = true): Array<string> {
 	const serversSet = new Set(["home"]);
 	serversSet.forEach(server => ns.scan(server).forEach(connectServer => serversSet.add(connectServer)));
@@ -107,6 +114,62 @@ export function getAllServers(ns: NS, removeHome = true): Array<string> {
     // ns.printf(Array.from(x).toString());
 	return Array.from(serversSet);
 }
+
+/**
+ * STOLEN FROM QUACKSOULS
+ * 
+ * Scan all servers in the game world.  Exclude purchased servers and our home
+ * server.
+ *
+ * @param {ns} ns The Netscript API.
+ * @param {string} root Start scanning from this server.  Default is home
+ *     server.
+ * @param {set} visit Set of servers visited so far.  Default is empty set.
+ * @returns {array<string>} Array of hostnames of world servers, excluding home
+ *     and purchased servers.
+ */
+export function getAllServersAlt(ns: NS, root = 'home', visit = new Set()) {
+    const not_pserv = (host) => !ns.getServer(host).purchasedByPlayer;
+    const not_visited = (host) => !visit.has(host);
+    // Use a recursive version of depth-first search.
+    ns.scan(root)
+        .filter(not_pserv)
+        .filter(not_visited)
+        .forEach((host) => {
+            visit.add(host);
+            getAllServersAlt(ns, host, visit);
+        });
+    return [...visit];
+}
+
+// const servers = ["home"];
+// for (const server of servers) {
+//     for (const other of ns.scan(server)) {
+//         if (!servers.includes(other)) servers.push(other);
+//     }
+// }
+// servers.shift(); // if you don't want "home" in the list
+
+// const insertAt =
+//             sortedRamHostArray.findIndex((other) => {
+//                 ns.printf(`Finding Index: ${other.hostName} | ${other.freeRam} <= ${hostToFreeRam.freeRam}`);
+//                 ns.printf(`Predicate matches: %s`, other.freeRam <= hostToFreeRam.freeRam);
+//                 return other.freeRam <= hostToFreeRam.freeRam;
+//             }) + 1;
+
+// The recursive server navigation algorithm. The lambda predicate determines which servers to add to the final list.
+// You can also plug other functions into the lambda to perform other tasks that check all servers at the same time.
+/** @param {NS} ns */
+// export function getServers(ns: NS, lambdaCondition = () => true, hostname = "home", servers:string[] = [], visited:string[] = []) {
+// 	if (visited.includes(hostname)) return;
+// 	visited.push(hostname);
+// 	if (lambdaCondition(hostname)) servers.push(hostname);
+// 	const connectedNodes = ns.scan(hostname);
+// 	if (hostname !== "home") connectedNodes.shift();
+// 	for (const node of connectedNodes) getServers(ns, lambdaCondition, node, servers, visited);
+// 	return servers;
+// }
+
 
 //TODO: fancy parser for flags/args
 // export function handleArgs(ns: NS, scriptArgs: ScriptArg[], defaults: ArgDefaults[]): ScriptArg[] {
