@@ -4,7 +4,7 @@ import { HWGW_ThreadCounts, HWGW_StartEndTimes, HWGW_RamBlocks, HWGW_Job } from 
 import { isPrepped, iterativePrep } from '../prep';
 import { disableLog, getFreeRAM } from '../../core/coreUtils';
 
-function getHWGWThreadCounts(ns: NS, target: string, leechPercent: number): HWGW_ThreadCounts {
+function getHWGWThreadCounts(ns: NS, target: string, leechPercent: number, print = false): HWGW_ThreadCounts {
     // hack is simple, just get the leech amt, floor it
     const hackThreads = Math.floor(ns.hackAnalyzeThreads(target, ns.getServerMaxMoney(target) * leechPercent));
     
@@ -28,10 +28,13 @@ function getHWGWThreadCounts(ns: NS, target: string, leechPercent: number): HWGW
     // ns.print(`weaken2Threads: ${weaken2Threads} for ${(growThreads * HGW_TYPE.GROW.SEC_INCR)} sec incr from grow (${ns.formatNumber(HGW_TYPE.WEAKEN.SEC_DECR)} decr ea)`);
     // ns.print(`\n`);
 
-    return new HWGW_ThreadCounts(hackThreads, weaken1Threads, growThreads, weaken2Threads);
+    const threadCounts = new HWGW_ThreadCounts(hackThreads, weaken1Threads, growThreads, weaken2Threads);
+    if (print) threadCounts.print(ns);
+
+    return threadCounts;
 }
 
-function getStartEndTimes(ns: NS, target: string): HWGW_StartEndTimes {
+function getStartEndTimes(ns: NS, target: string, print = false): HWGW_StartEndTimes {
     let executionTimes = getHgwExecTimes(ns, target);
     
     const BUFFER_MS = 50;
@@ -58,7 +61,7 @@ function getStartEndTimes(ns: NS, target: string): HWGW_StartEndTimes {
     startEndTimes.growStart = startEndTimes.growEnd - executionTimes.GrowTime;
 
     //print
-    startEndTimes.print(ns);
+    if (print) startEndTimes.print(ns);
 
     return startEndTimes
 }
@@ -75,6 +78,7 @@ function getTotalRamNeeded(ns: NS, threadCounts: HWGW_ThreadCounts, host?: strin
         let freePercent = host == 'home' ? 0.1 : 0;
         let freeRam = getFreeRAM(ns, host, freePercent);
         if (totalRamNeeded > freeRam) {
+            ns.printf(`ERROR Need ${ns.formatRam(totalRamNeeded - freeRam)} more RAM!`);
             return -1;
         }
     }
@@ -85,19 +89,19 @@ function getTotalRamNeeded(ns: NS, threadCounts: HWGW_ThreadCounts, host?: strin
 
 // Limited by RAM for grow, time for weaken
 //TODO: assumes home
-async function exploit(ns: NS, target: string, leechPercent: number) {
+async function exploit(ns: NS, target: string, leechPercent: number, print = false) {
 
-    let threadCounts = getHWGWThreadCounts(ns, target, leechPercent);
+    let threadCounts = getHWGWThreadCounts(ns, target, leechPercent, print);
     let ramBlocks = new HWGW_RamBlocks(threadCounts);
 
     let ramCost = getTotalRamNeeded(ns, threadCounts, 'home');
     if (ramCost == -1) {
-        ns.tprint("WARN Excessive RAM cost, decrease leech %!!!");
+        ns.tprint("ERROR Excessive RAM cost, decrease leech %!!!");
         await ns.sleep(10000);
         return -1;
     }
 
-    let startEndTimes = getStartEndTimes(ns, target);
+    let startEndTimes = getStartEndTimes(ns, target, print);
 
     ns.printf(`-----------------------------------------------------`);
     let batch: HWGW_Job[] = [];
@@ -123,11 +127,12 @@ export async function main(ns: NS) {
     disableLog(ns); ns.tail();
 
     const target = ns.args[0] as string;
-    const targetCount = ns.args[1] as number || 9;
-    const leechPercent = ns.args[2] as number || 0.9;
+    // const targetCount = ns.args[1] as number || 9;
+    const leechPercent = ns.args[1] as number || 0.1;
+    const print = ns.args[2] as boolean || false;
 
     if (target == 'ALL') {
-        const targets = getBestTargetsNaiive(ns, targetCount, true);
+        const targets = getBestTargetsNaiive(ns, 10, true);
         for (const target of targets) {
             ns.run('hack/controllers/protobatcher.js', {}, target); //TODO: hardcoded
         }
@@ -139,7 +144,7 @@ export async function main(ns: NS) {
 
         while (isPrepped(ns, target, true)) {
             ns.print(`\n`);
-            await exploit(ns, target, leechPercent);
+            await exploit(ns, target, leechPercent, print);
             ns.print(`\n\n----------------`);
         }
 
