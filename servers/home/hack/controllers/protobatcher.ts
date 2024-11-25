@@ -99,7 +99,7 @@ async function exploit(ns: NS, target: string, leechPercent: number) {
 
     let startEndTimes = getStartEndTimes(ns, target);
 
-    ns.printf(`-----------------------------------------------------`); //not printing?
+    ns.printf(`-----------------------------------------------------`);
     let batch: HWGW_Job[] = [];
     for (const hwgwType of HWGW_TYPES) {
         const job = new HWGW_Job(hwgwType, threadCounts[hwgwType+'Threads'], startEndTimes[hwgwType+'Start'], startEndTimes[hwgwType+'End'], ramBlocks[hwgwType+'RamBlock'], 'home');
@@ -113,7 +113,8 @@ async function exploit(ns: NS, target: string, leechPercent: number) {
 
     const BUFFER_BATCH_MS = 100;
     
-    ns.printf(`Sleeping: ${ns.tFormat(startEndTimes.weaken2End + BUFFER_BATCH_MS)}`);
+    const assumedMoneyGainPerSecond = ns.getServerMaxMoney(target) * leechPercent / (startEndTimes.weaken2End * 1000)
+    ns.printf(`$/min: ${ns.formatNumber(assumedMoneyGainPerSecond*60)} | Sleeping: ${ns.tFormat(startEndTimes.weaken2End + BUFFER_BATCH_MS)}`);
     await ns.sleep(startEndTimes.weaken2End + BUFFER_BATCH_MS);
 
 }
@@ -122,13 +123,13 @@ export async function main(ns: NS) {
     disableLog(ns); ns.tail();
 
     const target = ns.args[0] as string;
-    const targetCount = ns.args[1] as number || 8;
+    const targetCount = ns.args[1] as number || 9;
     const leechPercent = ns.args[2] as number || 0.9;
 
     if (target == 'ALL') {
         const targets = getBestTargetsNaiive(ns, targetCount, true);
         for (const target of targets) {
-            ns.run('hack/controllers/protobatcher.js', {}, target);
+            ns.run('hack/controllers/protobatcher.js', {}, target); //TODO: hardcoded
         }
     } else {
 

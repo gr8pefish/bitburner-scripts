@@ -65,15 +65,10 @@ function getWGWThreads(ns: NS, target: string): HWGW_ThreadCounts {
     
     // grow is trickier - get multiplier, and ceil it to ensure growth
     const maxMoney = ns.getServerMaxMoney(target);
-
     if (ns.fileExists('formulas.exe')) {
-        // const mockServer = ns.formulas.mockServer();
-        // mockServer.hackDifficulty = ns.getServerMinSecurityLevel(target);
-        // ns.print(`${mockServer.hackDifficulty}`)
         const so = ns.getServer(target);
         so.hackDifficulty = so.minDifficulty;
         threadCounts.growThreads = Math.ceil(ns.formulas.hacking.growThreads(so, ns.getPlayer(), so.moneyMax));
-        // growThreads = ns.formulas.hacking.growThreads(mockServer, ns.getPlayer(), maxMoney); //not sure why this didn't work and gave inf - investigate
     } else {
         const multFactor = maxMoney / (maxMoney - (maxMoney - ns.getServerMoneyAvailable(target)));
         threadCounts.growThreads = Math.ceil(ns.growthAnalyze(target, multFactor));

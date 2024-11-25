@@ -8,7 +8,7 @@ export async function main(ns: NS) {
     const previousSharePower = ns.getSharePower();
 
     for (let arg of ns.args) {
-        if (arg == 'ALL') {
+        if (typeof arg === 'string' && arg == 'ALL') {
             getAllServers(ns, true).forEach(host => {
                 const threads = getMaximumThreads(ns, SHARE_SCRIPT_LOCATION, host, Math.floor)
                 if (threads > 0) ns.exec(SHARE_SCRIPT_LOCATION, host, threads);
@@ -16,9 +16,9 @@ export async function main(ns: NS) {
             });
             break;
         } else {
-            const target = arg as string;
-            const threads = getMaximumThreads(ns, SHARE_SCRIPT_LOCATION, target, Math.floor)
-            ns.exec(SHARE_SCRIPT_LOCATION, target, threads);
+            const mult = ns.args[0] as number || 1;
+            const threads = Math.floor(getMaximumThreads(ns, SHARE_SCRIPT_LOCATION, 'home', Math.floor) * mult);
+            ns.run(SHARE_SCRIPT_LOCATION, threads);
             threadTotal += threads;
         }
     }
