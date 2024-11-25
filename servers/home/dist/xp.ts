@@ -9,9 +9,8 @@ import { getMaximumThreads } from "../core/coreUtils";
  * @param ns 
  */
 export async function main(ns: NS) {
-    ns.tail();
-    const target = ns.args[0] as string || 'joesguns'; //TODO: fancy parsing via helper
-    const minifierMult = ns.args[1] as number || 1;
+    const target = 'joesguns'; //can change later, just such a good target
+    const minifierMult = ns.args[0] as number || 1;
     
     // set constants
     const script = HWGW_CONSTANTS.grow.SCRIPT_LOCATION;
