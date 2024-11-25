@@ -1,5 +1,5 @@
 import { HWGW_CONSTANTS, HWGW_TYPES } from "../core/constants";
-import { prepAllServers, getFreeRAM, rootServer } from "../core/coreUtils";
+import { prepAllServers, getFreeRAM, rootServer, getMaximumThreads } from "../core/coreUtils";
 import { HWGW_StartEndTimes, HWGW_ThreadCounts } from "../core/datatypes";
 import { getHgwExecTimes } from "./hackUtils";
 
@@ -31,7 +31,10 @@ export function isPrepped(ns:NS, target: string, print = false): boolean {
 async function minimizeSecurity(ns: NS, target: string, securityDifference: number) {
     ns.print(`Need ${ns.formatNumber(securityDifference)} less security`)
     // let hostRAM = getFreeRAM(ns, 'home', 0.1) //TODO: check if enough ram before running
-    const weaken1Threads = Math.ceil(securityDifference / ns.weakenAnalyze(1));
+    let weaken1Threads = Math.ceil(securityDifference / ns.weakenAnalyze(1));
+    const maxThreads = getMaximumThreads(ns, HWGW_CONSTANTS.weaken1.RAM_COST, ns.getHostname(), Math.floor);
+    if (weaken1Threads > maxThreads) weaken1Threads = maxThreads;
+    ns.printf(`Running WEAKEN with ${weaken1Threads} threads`);
     ns.exec(HWGW_CONSTANTS.weaken1.SCRIPT_LOCATION, ns.getHostname(), {threads: weaken1Threads, temporary: true}, target)
     // let [delay, port] = [0, 0];
     // ns.exec(HGW_TYPE.WEAKEN.SCRIPT_LOCATION, ns.getHostname(), {threads: threadCount, temporary: true}, JSON.stringify({target, delay, port}))
@@ -44,7 +47,7 @@ async function maximizeMoney(ns: NS, target: string, moneyDifference: number) {
     
     const maxMoney = ns.getServerMaxMoney(target);
     const multFactor = maxMoney / (maxMoney - moneyDifference);
-    const growThreads = Math.ceil(ns.growthAnalyze(target, multFactor));
+    let growThreads = Math.ceil(ns.growthAnalyze(target, multFactor));
 
     // ns.printf(`Max: ${ns.formatNumber(maxMoney)}`)
     // ns.printf(`Missing: ${ns.formatNumber(moneyDifference)}`)
@@ -52,6 +55,9 @@ async function maximizeMoney(ns: NS, target: string, moneyDifference: number) {
     // ns.printf(`Should be: ${ns.formatNumber(ns.getServerMoneyAvailable(target) * multFactor)}`)
     // ns.printf(`Grow threads: ${ns.formatNumber(growThreads)}`)
 
+    const maxThreads = getMaximumThreads(ns, HWGW_CONSTANTS.grow.RAM_COST, ns.getHostname(), Math.floor);
+    if (growThreads > maxThreads) growThreads = maxThreads;
+    ns.printf(`Running GROW with ${growThreads} threads`);
     ns.exec(HWGW_CONSTANTS.grow.SCRIPT_LOCATION, ns.getHostname(), {threads: growThreads, temporary: true}, target)
     // let [delay, port] = [0, 0];
     // ns.exec(HGW_TYPE.GROW.SCRIPT_LOCATION, ns.getHostname(), {threads: threadCount, temporary: true}, JSON.stringify({target, delay, port}))
