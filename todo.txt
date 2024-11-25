@@ -11,6 +11,7 @@ Scripts:
 - pservs
 
 - more utils
+    - always backdoor when possible? need singularity?
     - list of server args as option, standardize somehow, even if w/ optional flags
     - better logging, logging class even
         - react windows
