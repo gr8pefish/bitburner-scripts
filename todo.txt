@@ -3,8 +3,9 @@ Misc:
 
 
 Scripts:
-- ram pool
-    - global instance w/ updates
+- integrate & test ram network w/ helper scripts
+    - needs optional split batch param for earlygame
+    - also needs helper method to just assign/exec a job and update internals (do this myself)
 
 - earlygame ram-efficient scripts (e.g. batching, xp)
 
