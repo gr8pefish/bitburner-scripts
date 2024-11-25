@@ -24,12 +24,13 @@ export function getMaximumThreads(ns: NS, scriptOrRamCost: string | number, host
     if (!host) host = 'home';
     let ramCost: number
     if (typeof scriptOrRamCost === 'string') {
-        ramCost = getMaximumThreads(ns, ns.getScriptRam(scriptOrRamCost, host), host, round);
+        ramCost = ns.getScriptRam(scriptOrRamCost, host);
     } else {
         ramCost = scriptOrRamCost;
     }
     const hostRamFree = getFreeRAM(ns, host);
     let threadCount = hostRamFree <= 0 ? 0 : hostRamFree / ramCost;
+    // ns.tprint(`${host}: ${threadCount}`);
     if (round) threadCount = round(threadCount);
     return threadCount;
 }

@@ -1,14 +1,14 @@
-import { getHgwExecTimes } from '../hackUtils';
+import { getBestTargetsNaiive, getHgwExecTimes } from '../hackUtils';
 import { HWGW_CONSTANTS, HWGW_TYPES } from '../../core/constants';
 import { HWGW_ThreadCounts, HWGW_StartEndTimes, HWGW_RamBlocks, HWGW_Job } from '../../core/datatypes';
-import { isPrepped } from '../prep';
-import { getFreeRAM } from '../../core/coreUtils';
+import { isPrepped, iterativePrep } from '../prep';
+import { disableLog, getFreeRAM } from '../../core/coreUtils';
 
 function getHWGWThreadCounts(ns: NS, target: string, leechPercent: number): HWGW_ThreadCounts {
     // hack is simple, just get the leech amt, floor it
     const hackThreads = Math.floor(ns.hackAnalyzeThreads(target, ns.getServerMaxMoney(target) * leechPercent));
     
-    // weaken is easy as well, just account for hack and grow increases, ceil just in case
+    // weaken is easy as well, just account for hack increases, ceil just in case
     const weaken1Threads = Math.ceil((hackThreads * HWGW_CONSTANTS.hack.SEC_CHANGE) / HWGW_CONSTANTS.weaken1.SEC_CHANGE);
     
     // grow is trickier - get multiplier from hackThreads vs maxMoney, and ceil it to ensure growth
@@ -16,7 +16,7 @@ function getHWGWThreadCounts(ns: NS, target: string, leechPercent: number): HWGW
     const multFactor = maxMoney / (maxMoney - (maxMoney * (ns.hackAnalyze(target) * hackThreads)));
     const growThreads = Math.ceil(ns.growthAnalyze(target, multFactor)); //TODO: add extra to account for leveling?
     
-    // weaken is easy as well, just account for hack and grow increases, ceil just in case
+    // weaken is easy as well, just account for grow increases, ceil just in case
     const weaken2Threads = Math.ceil((growThreads * HWGW_CONSTANTS.grow.SEC_CHANGE) / HWGW_CONSTANTS.weaken2.SEC_CHANGE);
 
     /** Old print statements */
@@ -93,13 +93,13 @@ async function exploit(ns: NS, target: string, leechPercent: number) {
     let ramCost = getTotalRamNeeded(ns, threadCounts, 'home');
     if (ramCost == -1) {
         ns.tprint("WARN Excessive RAM cost, decrease leech %!!!");
-        await ns.sleep(6000);
+        await ns.sleep(10000);
         return -1;
     }
 
     let startEndTimes = getStartEndTimes(ns, target);
 
-    ns.printf(`-----------------------------------------------------`)
+    ns.printf(`-----------------------------------------------------`); //not printing?
     let batch: HWGW_Job[] = [];
     for (const hwgwType of HWGW_TYPES) {
         const job = new HWGW_Job(hwgwType, threadCounts[hwgwType+'Threads'], startEndTimes[hwgwType+'Start'], startEndTimes[hwgwType+'End'], ramBlocks[hwgwType+'RamBlock'], 'home');
@@ -109,26 +109,40 @@ async function exploit(ns: NS, target: string, leechPercent: number) {
     for (const job of batch) {
         ns.exec(HWGW_CONSTANTS[job.hwgw_type].SCRIPT_LOCATION, 'home', {threads: job.threads, temporary: true}, target, job.startTime, job.endTime);
     }
-    ns.printf(`-----------------------------------------------------`)
+    ns.printf(`-----------------------------------------------------`);
 
     const BUFFER_BATCH_MS = 100;
+    
+    ns.printf(`Sleeping: ${ns.tFormat(startEndTimes.weaken2End + BUFFER_BATCH_MS)}`);
     await ns.sleep(startEndTimes.weaken2End + BUFFER_BATCH_MS);
 
 }
 
 export async function main(ns: NS) {
-    ns.tail();
+    disableLog(ns); ns.tail();
 
     const target = ns.args[0] as string;
-    const leechPercent = ns.args[1] as number || 0.035;
+    const targetCount = ns.args[1] as number || 8;
+    const leechPercent = ns.args[2] as number || 0.9;
 
-    while (isPrepped(ns, target, true)) {
-        ns.print(`\n`);
-        await exploit(ns, target, leechPercent);
-        ns.print(`\n\n----------------`);
+    if (target == 'ALL') {
+        const targets = getBestTargetsNaiive(ns, targetCount, true);
+        for (const target of targets) {
+            ns.run('hack/controllers/protobatcher.js', {}, target);
+        }
+    } else {
+
+        if (!isPrepped(ns, target, true)) {
+            await iterativePrep(ns, target);
+        }
+
+        while (isPrepped(ns, target, true)) {
+            ns.print(`\n`);
+            await exploit(ns, target, leechPercent);
+            ns.print(`\n\n----------------`);
+        }
+
     }
-
-    ns.tprint(`WARN Server ${target} is NOT prepped!`);
 }
 
 

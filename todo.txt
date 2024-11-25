@@ -1,14 +1,16 @@
 Misc:
-- 
 
 Scripts:
-- way better prep script (protobatch it)
-- improve xp script (w/ targets)
+- way better prep script (protobatch it w/ wgw simul)
+- improve + debug xp script (w/ targets & w/ minimize ram takeup)
 - ram pool
     - global instance w/ updates
 - more utils
+    - list of server args as option, standardize somehow, even if w/ optional flags
 - better logging, logging class even
-
-- eventually formulas
+- early game script automation
+- full batcher w/ formulas (jit?)
+- eventual: stats/data for each server, for optimizations
+- fix killAll arg
 
 - types for string | Server, for autoconvert to name and pass in ram efficient type (whatever I have)

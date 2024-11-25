@@ -57,9 +57,12 @@ export function getBestTargetsNaiive(ns: NS, listLength: number = 10, print = fa
             const server = bestServers[i];
             ns.printf(`${i + 1}. ${server} - Max Money: ${ns.formatNumber(ns.getServerMaxMoney(server))} - Required Hacking Level: ${ns.getServerRequiredHackingLevel(server)}`);
         }
-    } else {
+    } else if (print) {
         ns.printf("No suitable targets found for best server targets!");
     }
+
+    bestServers.splice(listLength, bestServers.length - listLength);
+
     return bestServers;
 }
 
