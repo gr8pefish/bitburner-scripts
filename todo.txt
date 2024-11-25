@@ -14,7 +14,7 @@ Scripts:
     - list of server args as option, standardize somehow, even if w/ optional flags
     - better logging, logging class even
         - react windows
-- continue general cleanup
+- continue general cleanup, incl. naming conventions (e.g. shareAll) + file dirs
 
 
 Eventually:
