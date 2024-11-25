@@ -1,6 +1,7 @@
 export const HGW_DIR = '/hacking/hgw/';
 export const DIST_DIR = '/dist/';
 export const SHARE_SCRIPT_LOCATION = DIST_DIR + 'share.js';
+export const XP_SCRIPT_LOCATION = DIST_DIR + 'xp.js';
 
 // 1 weaken = 4 hacks and 1 grow = 3.2 hacks
 // Security increase per hack thread__: 0.002

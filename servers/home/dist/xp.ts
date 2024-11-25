@@ -1,6 +1,6 @@
 import { getHgwExecTimes } from "../hack/hackUtils";
 import { HWGW_CONSTANTS } from "../core/constants";
-import { disableLog, getMaximumThreads } from "../core/coreUtils";
+import { getMaximumThreads } from "../core/coreUtils";
 
 /**
  * Grows a given server (default 'joesguns') infinitely, using maximum threads of wherever this script is run from
@@ -14,15 +14,16 @@ export async function main(ns: NS) {
     const minifierMult = ns.args[1] as number || 1;
     
     // set constants
-    const host = ns.getHostname();
     const script = HWGW_CONSTANTS.grow.SCRIPT_LOCATION;
-    const growThreadCount = Math.floor(getMaximumThreads(ns, script, host, Math.floor) * minifierMult);
+    const growThreadCount = Math.floor(getMaximumThreads(ns, script, ns.getHostname(), Math.floor) * minifierMult);
     const BUFFER_MS = 50
 
     // continually grow at max threads, and then simply sleep for that execution length (+ buffer)
-    while (true) {
-        ns.exec(script, host, growThreadCount, target);
-        await ns.sleep(getHgwExecTimes(ns, target).GrowTime + BUFFER_MS);
+    if (growThreadCount > 0) {
+        while (true) {
+            ns.run(script, growThreadCount, target);
+            await ns.sleep(getHgwExecTimes(ns, target).GrowTime + BUFFER_MS);
+        }
     }
 
 }
