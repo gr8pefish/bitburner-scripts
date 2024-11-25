@@ -1,16 +1,25 @@
 Misc:
+- cleanup mirroring (remove local files?)
+
 
 Scripts:
-- way better prep script (protobatch it w/ wgw simul)
-- improve + debug xp script (w/ targets & w/ minimize ram takeup)
 - ram pool
     - global instance w/ updates
+
+- earlygame ram-efficient scripts (e.g. batching, xp)
+
+- pservs
+
 - more utils
     - list of server args as option, standardize somehow, even if w/ optional flags
-- better logging, logging class even
-- early game script automation
+    - better logging, logging class even
+        - react windows
+- continue general cleanup
+
+
+Eventually:
 - full batcher w/ formulas (jit?)
+
 - eventual: stats/data for each server, for optimizations
-- fix killAll arg
 
 - types for string | Server, for autoconvert to name and pass in ram efficient type (whatever I have)
