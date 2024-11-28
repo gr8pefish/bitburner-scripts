@@ -99,6 +99,24 @@ export type MathRoundType = Math["floor"] | Math["ceil"] | null;
 
 //------------------------------- RAM Network -----------------------------------
 
+export enum ServerSubset {
+    ALL = "ALL",
+    NOT_OWNED = "NOT_OWNED",
+    HOME_ONLY = "HOME_ONLY",
+    PSERV_ONLY = "PSERV_ONLY",
+    ALL_BUT_HOME = "ALL_BUT_HOME",
+}
+
+// Define the mapping of ServerSubset to predicates
+export const serverSubsetPredicates: Record<ServerSubset, (server: ServerRam) => boolean> = {
+    [ServerSubset.ALL]: () => true, // Include all servers
+    [ServerSubset.NOT_OWNED]: (server) => !server.serverName.startsWith("pserv-") && server.serverName !== "home",
+    [ServerSubset.HOME_ONLY]: (server) => server.serverName === "home",
+    [ServerSubset.PSERV_ONLY]: (server) => server.serverName.startsWith("pserv-"),
+    [ServerSubset.ALL_BUT_HOME]: (server) => server.serverName !== "home",
+};
+
+export type HostToThreads = Map<string, number>
 
 export type ServerRam = {
     serverName: string;
@@ -111,6 +129,7 @@ export class ServerRamNetwork {
     private heap: ServerRam[] = []; // Min-heap for freeRam
     private map: Map<string, ServerRam> = new Map(); // Map for quick updates by serverName
     private freeRamMinThreshold: number = 1; // With less than this amount of ram free, the entry won't appear/will be removed
+    static hostToThreads: any;
 
     private constructor() {}
 
@@ -126,6 +145,12 @@ export class ServerRamNetwork {
     public setExclusionThreshold(threshold: number): void {
         this.freeRamMinThreshold = threshold;
         this.rebuildHeap(); // Rebuild the heap to apply the new threshold
+    }
+
+    // Filter servers by predicate using the heap
+    public filterServers(predicate: (server: ServerRam) => boolean): ServerRam[] {
+        // Use the heap for efficient filtering
+        return this.heap.filter(predicate);
     }
 
     // Add or update a server
@@ -175,38 +200,71 @@ export class ServerRamNetwork {
         }
     }
 
-    // Optimized method to get `x` servers matching `freeRam >= ramBlockSize`
-    public getServersWithDynamicUpdateOptimized(
+    public updateServerWithSubset(ramBlockSize: number, filteredServerRamList: ServerRam[], numServers = 1): ServerRam[] {
+        return this.updateServersWithDynamicUpdateOptimized(numServers, ramBlockSize, filteredServerRamList);
+    }
+
+    public updateServer(ramBlockSize: number, subset: ServerSubset, numServers = 1): ServerRam[] {
+        // Apply the filtering predicate based on the subset
+        const predicate = serverSubsetPredicates[subset];
+        const filteredList = this.heap.filter(predicate);
+    
+        // Use the filtered list to get the server(s)
+        return this.updateServersWithDynamicUpdateOptimized(numServers, ramBlockSize, filteredList);
+    }
+
+    // Optimized method to get and update servers
+    //TODO: just return serverName for ease?
+    private updateServersWithDynamicUpdateOptimized(
         serverCount: number,
-        ramBlockSize: number
+        ramBlockSize: number,
+        filteredList: ServerRam[] = this.heap // Default to entire heap
     ): ServerRam[] {
         const result: ServerRam[] = [];
-
-        while (result.length < serverCount) {
-            const serverRam = this.heap[0]; // Get the smallest freeRam server
+    
+        // Clone the filtered list to avoid modifying the original heap
+        const filteredHeap = [...filteredList];
+    
+        while (result.length < serverCount && filteredHeap.length > 0) {
+            // Sort the filtered heap by freeRam for min-heap behavior
+            filteredHeap.sort((a, b) => a.freeRam - b.freeRam);
+            const serverRam = filteredHeap.shift(); // Get the smallest freeRam server
+    
             if (!serverRam || serverRam.freeRam <= ramBlockSize) {
                 // If no server matches the condition, break
                 break;
             }
-
+    
             // Add the server to the result list
             result.push({ ...serverRam });
-
+    
             // Update the server's freeRam
             const updatedFreeRam = serverRam.freeRam - ramBlockSize;
-
-            if (updatedFreeRam <= this.freeRamMinThreshold) {
-                // Remove the server if it falls below or equals the threshold
-                this.remove(serverRam.serverName);
-            } else {
-                // Update in place and re-heapify
+    
+            // Update the base map and heap with the new freeRam value
+            if (updatedFreeRam > this.freeRamMinThreshold) {
+                // Update the server in the base map and heap
                 serverRam.freeRam = updatedFreeRam;
-                this.bubbleDown(0); // Maintain the heap property
+                this.map.set(serverRam.serverName, serverRam);
+    
+                const heapIndex = this.heap.findIndex(s => s.serverName === serverRam.serverName);
+                if (heapIndex >= 0) {
+                    this.heap[heapIndex].freeRam = updatedFreeRam;
+                    this.bubbleDown(heapIndex);
+                    this.bubbleUp(heapIndex);
+                }
+    
+                // Re-add the server to the filtered heap
+                filteredHeap.push(serverRam);
+            } else {
+                // Remove the server from the base map and heap if it falls below the threshold
+                this.remove(serverRam.serverName);
             }
         }
-
+    
         return result;
     }
+    
 
     // Get all servers (optional utility)
     public getAllServers(): ServerRam[] {
@@ -265,7 +323,116 @@ export class ServerRamNetwork {
     private swap(i: number, j: number): void {
         [this.heap[i], this.heap[j]] = [this.heap[j], this.heap[i]];
     }
+
+    public getPrintString(ns: NS): string {
+        let returnString = `ServerRam Network\n------------------------------\nServer Name        |  Free RAM\n------------------------------\n`;
+    
+        // Create a copy of the heap to extract elements without mutating the original
+        const tempHeap = [...this.heap];
+        const sortedServers: ServerRam[] = [];
+    
+        // Repeatedly extract the top element to sort
+        while (tempHeap.length > 0) {
+            sortedServers.push(this.extractMinFromHeap(tempHeap));
+        }
+    
+        // Print the sorted servers
+        sortedServers.forEach(server => {
+            returnString += server.serverName.padEnd(19) + "| " + ns.formatRam(server.freeRam).padStart(9) + "\n";
+        });
+    
+        return returnString;
+    }
+    
+    // Helper method to extract the smallest element from the heap
+    private extractMinFromHeap(heap: ServerRam[]): ServerRam {
+        // Swap the first and last elements, remove the last (min element)
+        const minElement = heap[0];
+        heap[0] = heap[heap.length - 1];
+        heap.pop();
+    
+        // Restore the heap property
+        this.bubbleDownHeap(heap, 0);
+        return minElement;
+    }
+    
+    // Helper method to restore the heap property (used primarily with a temporary heap)
+    private bubbleDownHeap(heap: ServerRam[], index: number): void {
+        const lastIndex = heap.length - 1;
+    
+        while (true) {
+            const leftChildIndex = 2 * index + 1;
+            const rightChildIndex = 2 * index + 2;
+            let smallest = index;
+    
+            if (
+                leftChildIndex <= lastIndex &&
+                heap[leftChildIndex].freeRam < heap[smallest].freeRam
+            ) {
+                smallest = leftChildIndex;
+            }
+    
+            if (
+                rightChildIndex <= lastIndex &&
+                heap[rightChildIndex].freeRam < heap[smallest].freeRam
+            ) {
+                smallest = rightChildIndex;
+            }
+    
+            if (smallest !== index) {
+                [heap[index], heap[smallest]] = [heap[smallest], heap[index]];
+                index = smallest;
+            } else {
+                break;
+            }
+        }
+    }
 }
 
+
+class OrderedSet<T> {
+    private set: Set<T>; // To ensure uniqueness
+    private sortedArray: T[]; // To maintain order
+    private comparator: (a: T, b: T) => number;
+
+    constructor(comparator: (a: T, b: T) => number) {
+        this.set = new Set();
+        this.sortedArray = [];
+        this.comparator = comparator;
+    }
+
+    add(item: T): void {
+        if (!this.set.has(item)) {
+            this.set.add(item);
+            this.sortedArray.push(item);
+            this.sortedArray.sort(this.comparator);
+        }
+    }
+
+    delete(item: T): boolean {
+        if (this.set.delete(item)) {
+            this.sortedArray = this.sortedArray.filter(i => i !== item);
+            return true;
+        }
+        return false;
+    }
+
+    has(item: T): boolean {
+        return this.set.has(item);
+    }
+
+    values(): T[] {
+        return [...this.sortedArray];
+    }
+
+    clear(): void {
+        this.set.clear();
+        this.sortedArray = [];
+    }
+
+    forEach(callback: (item: T) => void): void {
+        this.sortedArray.forEach(callback);
+    }
+}
 
 

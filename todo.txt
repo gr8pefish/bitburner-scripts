@@ -17,7 +17,7 @@ Scripts:
     - better logging, logging class even
         - react windows
 - continue general cleanup, incl. naming conventions (e.g. shareAll) + file dirs
-
+- add xp/s & money/s to overview
 
 Eventually:
 - full batcher w/ formulas (jit?)

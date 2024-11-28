@@ -1,4 +1,4 @@
-export const HGW_DIR = '/hacking/hgw/';
+export const HGW_DIR = '/hack/hgw/';
 export const DIST_DIR = '/dist/';
 export const SHARE_SCRIPT_LOCATION = DIST_DIR + 'share.js';
 export const XP_SCRIPT_LOCATION = DIST_DIR + 'xp.js';

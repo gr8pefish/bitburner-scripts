@@ -1,5 +1,6 @@
+import { NS, ScriptArg } from "@/NetscriptDefinitions";
 import { DIST_DIR, HGW_DIR } from "./constants";
-import { MathRoundType } from "./datatypes";
+import { HostToThreads, HWGW_ThreadCounts, MathRoundType, ServerRam, ServerRamNetwork, ServerSubset, serverSubsetPredicates } from "./datatypes";
 
 /**
  * Clears and diables logging
@@ -45,6 +46,10 @@ export function getMaximumThreads(ns: NS, scriptOrRamCost: string | number, host
  */
 export function getFreeRAM(ns: NS, target: string, freeRAMPercent = 0): number {
     return (ns.getServerMaxRam(target) * (1 - freeRAMPercent)) - ns.getServerUsedRam(target)
+}
+
+export function getRamBlock(ns: NS, scriptName: string, threads: number) {
+    return ns.getScriptRam(scriptName) * threads;
 }
 
 /**
@@ -141,6 +146,157 @@ export function getAllServersAlt(ns: NS, root = 'home', visit = new Set()) {
             getAllServersAlt(ns, host, visit);
         });
     return [...visit];
+}
+
+
+
+
+
+export namespace RamNetwork {
+
+    function addServer(ns: NS, serverName: string) {
+        const freeRam = getFreeRAM(ns, serverName);
+        ServerRamNetwork.getInstance().upsert({serverName, freeRam});
+    }
+
+    export function initRamNetwork(ns: NS) {
+        getAllServers(ns, false)
+            .filter(serverName => {
+                ns.hasRootAccess(serverName); //TODO: instead pass in predicate to getAllServers for quicker iteration
+            })
+            .forEach(serverName => {
+                const freeRam = getFreeRAM(ns, serverName);
+                ServerRamNetwork.getInstance().upsert({serverName, freeRam});
+            });
+        // ns.printf(ServerRamNetwork.getInstance().getPrintString(ns));
+    }
+
+
+    //TODO: push current for git history, then edit
+    export function initRamNetworkSet(ns: NS) {
+        // ns.getServer()
+        // getAllServerObjects(ns, filterHasRoot)
+    }
+
+    function filterServersBySubset(subset: ServerSubset, servers: ServerRam[]): ServerRam[] {
+        const predicate = serverSubsetPredicates[subset];
+        return servers.filter(predicate);
+    }
+
+    function filterServersByRamMin(amount: number, servers: ServerRam[]): ServerRam[] {
+        return servers.filter((server) => server.freeRam >= amount);
+    }
+
+    //TODO: convert to options param
+    function filterServersByRamAndSubset(subset: ServerSubset, ramMin: number, servers: ServerRam[]): ServerRam[] {
+        return filterServersByRamMin(ramMin, filterServersBySubset(subset, servers));
+    }
+
+        
+    //TODO partial is irrelevant here?
+    //unlikely this will work
+    function execNetwork(ns: NS, scriptName: string, subsetType: ServerSubset, percentAllocation: number, options?: { verbose?: boolean, partial?: boolean} ): number[] {
+        const { verbose = false, partial = false} = options || {}; //Defaults
+        const pids: number[] = [];
+
+        const ramBlockSize = ns.getScriptRam(scriptName)
+        const subset = filterServersByRamAndSubset(subsetType, ramBlockSize, ServerRamNetwork.getInstance().getAllServers());
+        const totalRam = getTotalRam(subset);
+        const ramToFill = Math.floor(totalRam * percentAllocation);
+        let filledRam = 0;
+        const hostThreads: HostToThreads = new Map();
+        while (filledRam <= ramToFill) {
+            let serverRamToExec = ServerRamNetwork.getInstance().updateServerWithSubset(ramBlockSize, subset); //TODO: can do way more efficiently
+            serverRamToExec = amalgamateServerRam(serverRamToExec);
+            if (verbose) ns.printf(`Host threads chosen: ${ServerRamToString(ns, serverRamToExec)}`);
+            for (const hostRam of serverRamToExec) {
+                const threads = getFreeRAM(ns, hostRam.serverName) - hostRam.freeRam / ramBlockSize; // (actualFree - simulatedFree = ramToUse) / blockSize
+                filledRam += hostRam.freeRam;
+                hostThreads.set(hostRam.serverName, (hostThreads.get(hostRam.serverName) || 0) + threads); //update threadcount
+            }
+        }
+        hostThreads.forEach((threads: number, hostname: string) => {
+            pids.unshift(ns.exec(scriptName, hostname, threads));
+        });
+        return pids;
+
+    }
+
+    //combine same server + ram together
+    function amalgamateServerRam(serverRam: ServerRam[]) {
+        const serverMap = new Map<string, number>();
+
+        // Aggregate freeRam for each serverName
+        for (const server of serverRam) {
+            serverMap.set(
+                server.serverName,
+                (serverMap.get(server.serverName) || 0) + server.freeRam
+            );
+        }
+
+        // Convert the map back to an array of ServerRam objects
+        return Array.from(serverMap.entries()).map(([serverName, freeRam]) => ({
+            serverName,
+            freeRam,
+        }));
+    }
+
+    function getTotalRam(serverRam: ServerRam[]): number {
+        return serverRam.reduce((total, server) => total + server.freeRam, 0);
+    }
+
+    function getThreadsFromRam(totalRam: number, ramBlock: number) {
+        return totalRam / ramBlock;
+    }
+
+    // function execMultiple(ns: NS, script: string, serverType: ServerSubset, options?: { usagePercent?: number, threads?: number; partial?: boolean }) {
+    //     const { usagePercent = 1, threads = 1, partial = false } = options || {}; // Default values
+    //     const hostThreads: HostToThreads = RamNetwork.getHostsFromNetwork(ns, script, serverType, usagePercent, partial);
+    //     hostThreads.forEach((threads: number, hostname: string) => {
+    //         ns.exec(script, hostname, threads); //TODO: args
+    //     });
+
+    // }
+
+
+
+    export function execScript(ns: NS, scriptName: string, threads: number, serverSubset: ServerSubset, options?: { verbose?: boolean, partial?: boolean} ): number[] {
+        const scriptThreads = [{scriptName: scriptName, ramBlockSize: ns.getScriptRam(scriptName) * threads, threads: threads}]; //array of 1 object only
+        return execScripts(ns, scriptThreads, serverSubset, options);
+    }
+
+    //TODO: implement partial
+
+    //TODO: debug, maybe rethink underlying data structure even? just go simple {name: freeRam} ordered map?
+
+    // Executes a set of scripts on the smallest servers possible (based on subset), and returns the pids
+    // ex: RamNetwork.execMult(ns, {Const.HWG.Hack.Script_Loc, getRamBlock(threads), threads}, ServerSubset.NOT_OWNED) --> will exec hack block
+    export function execScripts(ns: NS, scriptThreads: {scriptName: string, ramBlockSize: number, threads: number}[], serverSubset: ServerSubset, options?: { verbose?: boolean, partial?: boolean} ): number[] {
+        const { verbose = false, partial = false} = options || {}; //Defaults
+        const minRamBlock = Math.min(...scriptThreads.map(script => script.ramBlockSize));
+        if (verbose) ns.printf(`${ServerRamNetwork.getInstance().getPrintString(ns)}`);
+        if (verbose) ns.printf(`\n\nMin Ram: ${ns.formatRam(minRamBlock)}`);
+        const pids: number[] = [];
+        for (const scriptInput of scriptThreads) {
+            if (verbose) ns.printf(`\n\nScript: ${scriptInput.scriptName} | Ram: ${ns.formatRam(scriptInput.ramBlockSize)} | Threads: ${ns.formatNumber(scriptInput.threads)}`);
+            const subset = filterServersByRamAndSubset(serverSubset, minRamBlock, ServerRamNetwork.getInstance().getAllServers());
+            if (verbose) ns.printf(`Subset: ${ServerRamToString(ns, subset)}`)
+            const hostThreads = ServerRamNetwork.getInstance().updateServerWithSubset(scriptInput.ramBlockSize, subset, 1);
+            if (verbose) ns.printf(`Host threads chosen: ${ServerRamToString(ns, hostThreads)}`);
+            for (const hostRam of hostThreads) {
+                if (verbose) ns.printf(`Attempt to exec: ${scriptInput.scriptName} on ${hostRam.serverName} with ${scriptInput.threads}`);
+                pids.unshift(ns.exec(scriptInput.scriptName, hostRam.serverName, scriptInput.threads));
+            }
+        }
+        return pids;
+    }
+
+    function ServerRamToString(ns: NS, serverRam: ServerRam[]): string {
+        return serverRam
+            .map(sr => `Server: ${sr.serverName}, Free RAM: ${ns.formatRam(sr.freeRam)}`)
+            .join("\n");
+    }
+
 }
 
 // const servers = ["home"];

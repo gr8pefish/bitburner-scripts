@@ -1,5 +1,5 @@
 import { XP_SCRIPT_LOCATION } from "../core/constants";
-import { getAllServers } from "../core/coreUtils";
+import { getAllServers, RamNetwork } from "../core/coreUtils";
 
 //takes in a list of targets
 export async function main(ns: NS) {
