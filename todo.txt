@@ -1,5 +1,6 @@
 Misc:
 - cleanup mirroring (remove local files?)
+- debug imports increasing ram cost (e.g. share disableLog)
 
 
 Scripts:

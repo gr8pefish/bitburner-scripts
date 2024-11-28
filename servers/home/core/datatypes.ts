@@ -1,4 +1,4 @@
-import { Server } from "@/NetscriptDefinitions";
+import { ScriptArg, Server } from "@/NetscriptDefinitions";
 import { HWGW_CONSTANTS, HWGW_TYPES } from "./constants";
 
 export class HWGW_ThreadCounts {
@@ -62,6 +62,19 @@ export class HWGW_RamBlocks {
     }
 }
 
+export class Job {
+    constructor (
+        public scriptName: string,
+        public threads: number = 1,
+        public args: ScriptArg[] = [],
+        public hostName?: string,
+        public pid?: number,
+    ) {};
+    print(ns: NS) {
+        ns.printf(`JOB: ${this.scriptName} with ${this.threads} threads and args [${this.args}] on ${this.hostName} with pid ${this.pid}`);
+    }
+}
+
 export class HWGW_Job {
     constructor (
         public hwgw_type: typeof HWGW_TYPES[number], //h, w1, g, w2
@@ -121,8 +134,6 @@ export type HostnameToThreads = Map<string, number>;
 
 //todo: Simulated ram w/ copy of server (& either new class or hostname matching)
 
-//TODO: NOT SINGLETON, create as needed
-
 /**
  * Server to define RamNetwork, a collection of servers and their ram amounts
  * Contains a Server[] that is filtered and sorted (default freeRamAsc, and > 1gb freeRam w/ adminRights)
@@ -130,8 +141,6 @@ export type HostnameToThreads = Map<string, number>;
 export class ServerRamNetwork {
 
     //---------------------- Private --------------------------
-
-    private static instance: ServerRamNetwork;
 
     private servers: Server[] = [];
     private sortComparator: (a: Server, b: Server) => number;
@@ -158,7 +167,19 @@ export class ServerRamNetwork {
         }
     }
 
-    //---------------------- Update Defaults --------------------------
+    //---------------------- Constructor & Defaults --------------------------
+
+    public constructor(serverList: Server[], sortComparator?: (a: Server, b: Server) => number, filterPredicate?: (server: Server) => boolean) {
+        // Default comparator orders by maxRam ascending
+        const defaultSortComparator = (a: Server, b: Server) => a.maxRam - b.maxRam;
+        // Default filtering of freeFram > 1(gb)
+        const defaultFilterPredicate = (server: Server) => server.hasAdminRights && server.maxRam - server.ramUsed >= 1;
+
+        this.sortComparator = sortComparator || defaultSortComparator;
+        this.filterPredicate = filterPredicate || defaultFilterPredicate;
+
+        this.addMultiple(serverList);
+    }
 
     public updateDefaultSortComparator(sortComparator: (a: Server, b: Server) => number) {
         this.sortComparator = sortComparator;
@@ -170,32 +191,9 @@ export class ServerRamNetwork {
         this.reSort();
     }
 
-    //---------------------- Constructor --------------------------
-
-    private constructor(sortComparator: (a: Server, b: Server) => number, filterPredicate: (server: Server) => boolean) {
-        this.sortComparator = sortComparator;
-        this.filterPredicate = filterPredicate;
-    }
-
-    // Singleton instance
-    public static getInstance(sortComparator?: (a: Server, b: Server) => number, filterPredicate?: (server: Server) => boolean): ServerRamNetwork {
-        if (!ServerRamNetwork.instance) {
-            // Default comparator orders by maxRam ascending
-            const defaultSortComparator = (a: Server, b: Server) => a.maxRam - b.maxRam;
-            // Default filtering of freeFram > 1(gb)
-            const defaultFilteringPredicate = (server: Server) => server.hasAdminRights && server.maxRam - server.ramUsed >= 1;
-
-            ServerRamNetwork.instance = new ServerRamNetwork(
-                sortComparator || defaultSortComparator,
-                filterPredicate || defaultFilteringPredicate
-            );
-        }
-        return ServerRamNetwork.instance;
-    }
-
     //---------------------- Update Data --------------------------
 
-    // Add multiple servers, mostly for init
+    // Add multiple servers, mostly for init (overengineered?)
     public addMultiple(servers: Server[]): void {
         const filteredServers = servers.filter(this.filterPredicate); // Filter incoming servers
         const existingHostnames = new Set(this.servers.map(s => s.hostname)); // Track existing servers by hostname
@@ -208,6 +206,12 @@ export class ServerRamNetwork {
     
         // Sort in place
         this.servers.sort(this.sortComparator);
+    }
+
+    // Updates the ram used (and thereby free ram) directly
+    public updateSimulated(server: Server, usedRamSimulated: number) {
+        server.ramUsed = usedRamSimulated;
+        this.reSort();
     }
 
     // Update an existing server using a subset of servers and returns the updated subset, filtered and sorted
@@ -276,6 +280,15 @@ export class ServerRamNetwork {
     // Get a subset of servers based on multiple filtering predicate (combines with default filtering comparator, and returns sorted)
     public getSubsetMult(filterPredicates: ((server: Server) => boolean)[]): Server[] {
         return this.filterSortInPlace(this.servers, [this.filterPredicate, ...filterPredicates]);
+    }
+
+
+    public getNext(): Server {
+        return this.servers[0];
+    }
+
+    public getNextMatching(predicate: (server: Server) => boolean): Server {
+        return this.servers.find(predicate);
     }
 
     // Get all servers (may not be updated)
