@@ -228,19 +228,28 @@ export class RamNetwork {
         this.ns = ns;
     }
 
+
+
     //assumes that threads * scriptName is <= than the current filtering
-    private execute(host = this.network.getNext(), scriptName: string, threads: number, args: ScriptArg[]): number {
-        // simulated messed this up?...
-        // if ((host.maxRam - host.ramUsed) < this.ns.getScriptRam(scriptName) * threads) { 
-        //     throw Error(`ERROR Not enough RAM to exec on the given script!\n${host.hostname} | ${scriptName}\n Free RAM: ${this.ns.formatRam(host.maxRam - host.ramUsed)} | Needs: ${this.ns.getScriptRam(scriptName) * threads})`);
-        // }
-        this.ns.printf(`Attempt to exec:\n${host.hostname} | ${scriptName}\nFree RAM: ${this.ns.formatRam(this.ns.getServerMaxRam(host.hostname) - this.ns.getServerUsedRam(host.hostname))} | Needs: ${this.ns.formatRam(this.ns.getScriptRam(scriptName) * threads)}`);
+    private async execute(host = this.network.getNext(), scriptName: string, threads: number, args: ScriptArg[], removeSimulated = true): Promise<number> {
+        
+        // Error checking/printing
+        if ((host.maxRam - host.ramUsed) < this.ns.getScriptRam(scriptName) * threads) { 
+            throw Error(`ERROR Not enough RAM to exec on the given script!\n${host.hostname} | ${scriptName}\n Free RAM: ${this.ns.formatRam(host.maxRam - host.ramUsed)} | Needs: ${this.ns.getScriptRam(scriptName) * threads})`);
+        }
+        this.ns.printf(`INFO Attempt to exec:\n${host.hostname} | ${scriptName} | Free RAM: ${this.ns.formatRam(host.maxRam - host.ramUsed)} | Needs: ${this.ns.formatRam(this.ns.getScriptRam(scriptName, host.hostname) * threads)}`);
+        
+        // Call exec
         const pid = this.ns.exec(scriptName, host.hostname, threads, ...args);
-        this.network.reSort();
+        
+        // Update the network
+        const updatedServerObject = this.ns.getServer(host.hostname);
+        this.network.updateAfterExec(updatedServerObject, removeSimulated); //should re-sort too
+
         return pid;
     }
 
-    public execNetworkPercent(scriptName: string, percentFreeRamUsage: number) {
+    public async execNetworkPercent(scriptName: string, percentFreeRamUsage: number): Promise<number> {
         const scriptRamUsage = this.ns.getScriptRam(scriptName);
         const totalFreeRam = this.network.getAll().reduce((total, server) => total + (server.maxRam - server.ramUsed), 0);
         const usedRam = 0;
@@ -248,14 +257,15 @@ export class RamNetwork {
         while (usedRam <= ramToFill) {
             //TODO: need to simulate usage to not have a ton of 1threads
         }
+        return -1;
     }
 
-    public execNetwork(job: Job, options?: { partial?: boolean; verbose?: boolean }): number {
+    public async execNetwork(job: Job, options?: { partial?: boolean; verbose?: boolean }): Promise<number> {
         const { partial = false, verbose = false } = options || {};
-        return this.execNetworkMultiple([job], {partial, verbose})[0];
+        return await this.execNetworkMultiple([job], {partial, verbose})[0];
     }
 
-    public execNetworkMultiple(jobs: Job[], options?: { partial?: boolean; verbose?: boolean }): number[] {
+    public async execNetworkMultiple(jobs: Job[], options?: { partial?: boolean; verbose?: boolean }): Promise<number[]> {
         const { partial = false, verbose = false } = options || {};
         const pids: number[] = [];
         for (const job of jobs) { //for each job
@@ -271,11 +281,12 @@ export class RamNetwork {
                 } else {
                     jobHosts.push(host);
                     if (verbose) this.ns.printf(`Found ${host.hostname} with ${this.ns.formatRam(host.maxRam - host.ramUsed)} free, to fill the block of ${this.ns.formatRam(ramBlockSize)}`);
-                    this.network.updateSimulated(host, host.ramUsed + ramBlockSize);
+                    this.network.setSimulated(host.hostname, ramBlockSize);
+                    this.print();
                 }
             }
             for (const host of jobHosts) {
-                const pid = this.execute(host, job.scriptName, job.threads, job.args); //exec on the found host(s)
+                const pid = await this.execute(host, job.scriptName, job.threads, job.args); //exec on the found host(s)
                 pids.push(pid);
             }
         }

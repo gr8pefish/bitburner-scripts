@@ -67,11 +67,11 @@ export class Job {
         public scriptName: string,
         public threads: number = 1,
         public args: ScriptArg[] = [],
-        public hostName?: string,
-        public pid?: number,
+        // public hostName?: string,
+        // public pid?: number,
     ) {};
     print(ns: NS) {
-        ns.printf(`JOB: ${this.scriptName} with ${this.threads} threads and args [${this.args}] on ${this.hostName} with pid ${this.pid}`);
+        ns.printf(`JOB: ${this.scriptName} with ${this.threads} threads and args [${this.args}]`);// on ${this.hostName} with pid ${this.pid}`);
     }
 }
 
@@ -145,11 +145,12 @@ export class ServerRamNetwork {
     private servers: Server[] = [];
     private sortComparator: (a: Server, b: Server) => number;
     private filterPredicate: (server: Server) => boolean;
+    private simulatedAddtlRamUsed: Map<string, number> = new Map(); // <serverName, additionalRamUsed>;
 
-    private filterSortInPlace(source: Server[], filterPredicates?: ((server: Server) => boolean)[], sortComparator?: (a: Server, b: Server) => number): Server[] {
+    private filterSortInPlace(source: Server[], filterPredicates?: ((server: Server) => boolean)[], sortComparator?: (a: Server, b: Server) => number): void {
         // Use defaults for filterPredicates and sortComparator
-        const predicates = filterPredicates ?? [this.filterPredicate];
-        const comparator = sortComparator ?? this.sortComparator;
+        const predicates = filterPredicates || [this.filterPredicate];
+        const comparator = sortComparator || this.sortComparator;
     
         // Apply all predicates if provided
         const filtered = predicates.length > 0
@@ -160,18 +161,49 @@ export class ServerRamNetwork {
         if (filtered.length === source.length) {
             // No filtering occurred; sort the original array in place
             source.sort(comparator);
-            return source;
         } else {
-            // Filtering occurred; return a sorted filtered array
-            return filtered.sort(comparator);
+            // Filtering occurred; clear and replace the array with filtered results
+            source.length = 0; // Clear the array
+            source.push(...filtered.sort(comparator)); // Push sorted filtered elements
         }
     }
+
+    // private filterSortInPlace(source: Server[], filterPredicates?: ((server: Server) => boolean)[], sortComparator?: (a: Server, b: Server) => number): void {
+    //     const predicates = filterPredicates || [this.filterPredicate];
+    //     const comparator = sortComparator || this.sortComparator;
+
+    //     // this.testNS.printf(`Filter Pred: ${predicates.toString}`);
+    //     const noods = source.find(s => s.hostname == 'n00dles')
+    //     // this.testNS.printf(`Noods Index: ${source.findIndex(s => s.hostname == 'n00dles')}`);
+    //     this.testNS.printf(`Noods Ram Used (internal sort): ${this.testNS.formatRam(noods.ramUsed)}`);
+    //     this.testNS.printf(`Noods Ram Sim (internal sort): ${this.testNS.formatRam(this.simulatedAddtlRamUsed.get('n00dles'))}`);
+    
+    //     // Filter elements in place
+    //     let index = 0;
+    //     while (index < source.length) {
+    //         if (!predicates.every(predicate => predicate(source[index]))) {
+    //             source.splice(index, 1); // Remove elements not matching predicates
+    //         } else {
+    //             index++;
+    //         }
+    //     }
+
+    //     // this.testNS.printf(`Noods Index 2: ${source.findIndex(s => s.hostname == 'n00dles')}`);
+    
+    //     // Sort remaining elements
+    //     source.sort(comparator);
+    //     // this.testNS.printf(`Noods Index 3: ${source.findIndex(s => s.hostname == 'n00dles')}`);
+    // }
+    
 
     //---------------------- Constructor & Defaults --------------------------
 
     public constructor(serverList: Server[], sortComparator?: (a: Server, b: Server) => number, filterPredicate?: (server: Server) => boolean) {
-        // Default comparator orders by maxRam ascending
-        const defaultSortComparator = (a: Server, b: Server) => a.maxRam - b.maxRam;
+        // Default comparator orders by maxRam ascending, including any simulated ram too if relevant
+        const defaultSortComparator = (a: Server, b: Server) => {
+            const simulated = (server: Server) => this.simulatedAddtlRamUsed.get(server.hostname) || 0;
+            return (a.maxRam + simulated(a)) - (b.maxRam + simulated(b));
+        };
         // Default filtering of freeFram > 1(gb)
         const defaultFilterPredicate = (server: Server) => server.hasAdminRights && server.maxRam - server.ramUsed >= 1;
 
@@ -208,15 +240,23 @@ export class ServerRamNetwork {
         this.servers.sort(this.sortComparator);
     }
 
-    // Updates the ram used (and thereby free ram) directly
-    public updateSimulated(server: Server, usedRamSimulated: number) {
-        server.ramUsed = usedRamSimulated;
+    //TODO: a method for update/add simulated necessary?
+
+    public setSimulated(serverName: string, addtlSimulatedRamUse: number) {
+        this.simulatedAddtlRamUsed.set(serverName, addtlSimulatedRamUse);
+        this.reSort();
+    }
+
+    public removeSimulated(serverName: string) {
+        if (this.simulatedAddtlRamUsed.has(serverName)) {
+            this.simulatedAddtlRamUsed.delete(serverName);
+        }
         this.reSort();
     }
 
     // Update an existing server using a subset of servers and returns the updated subset, filtered and sorted
     //TODO: more simulation
-    public update(server: Server, serverList: Server[]): Server[] {
+    private update(server: Server, serverList: Server[]): Server[] {
         const subsetIndex = serverList.findIndex(s => s.hostname === server.hostname);
 
         // Remove the server from both lists if it doesn't satisfy the filtering comparator
@@ -266,20 +306,23 @@ export class ServerRamNetwork {
         this.reSortList(this.servers);
     }
 
-    public reSortList(serverList: Server[]): void {
+    public reSortList(serverList: Server[]) {
         this.filterSortInPlace(serverList);
     }
     
     //---------------------- Getters --------------------------
 
     // Get a subset of servers based on filtering predicate (combines with default filtering comparator, and returns sorted)
-    public getSubset(filterPredicate: (server: Server) => boolean): Server[] {
+    // NOTE: MODIFIES BASE SERVER LIST
+    private getSubset(filterPredicate: (server: Server) => boolean): Server[] {
         return this.getSubsetMult([this.filterPredicate, filterPredicate]);
     }
 
     // Get a subset of servers based on multiple filtering predicate (combines with default filtering comparator, and returns sorted)
-    public getSubsetMult(filterPredicates: ((server: Server) => boolean)[]): Server[] {
-        return this.filterSortInPlace(this.servers, [this.filterPredicate, ...filterPredicates]);
+    // NOTE: MODIFIES BASE SERVER LIST
+    private getSubsetMult(filterPredicates: ((server: Server) => boolean)[]): Server[] {
+        this.filterSortInPlace(this.servers, [this.filterPredicate, ...filterPredicates]);
+        return this.servers;
     }
 
 
@@ -297,7 +340,7 @@ export class ServerRamNetwork {
     }
 
     // Get all servers (updated)
-    public getAllUpdated(): Server[] {
+    private getAllUpdated(): Server[] {
         this.reSort();
         return this.servers;
     }
@@ -312,5 +355,75 @@ export class ServerRamNetwork {
         }
         return returnString;
     }
+
+    //---------------- Update -------------------------
+
+    public updateAfterExec(serverToUpdate: Server, removeSimulated = true): void {
+        const index = this.servers.findIndex(server => server.hostname === serverToUpdate.hostname);
+
+        if (removeSimulated) {
+            this.removeSimulated(serverToUpdate.hostname);
+        }
+    
+        // Check if the server matches the default filtering predicate
+        if (this.filterPredicate(serverToUpdate)) {
+            if (index !== -1) {
+                // Update the server if it exists
+                this.servers[index] = serverToUpdate;
+            } else {
+                // Add the server if it passes the filter but doesn't exist
+                this.servers.push(serverToUpdate);
+            }
+    
+            // Sort only around the updated or added element if necessary
+            this.reSortAroundIndex(serverToUpdate);
+        } else {
+            // Remove the server if it no longer matches the filter
+            if (index !== -1) {
+                this.servers.splice(index, 1);
+            }
+        }
+
+    }
+    
+    // Helper: ReSort around a specific server (optimized for minimal changes)
+    private reSortAroundIndex(server: Server): void {
+        const index = this.servers.findIndex(s => s.hostname === server.hostname);
+    
+        if (index !== -1) {
+            const comparator = this.sortComparator;
+    
+            // Apply bubble-up or bubble-down logic to maintain order
+            if (index > 0 && comparator(this.servers[index], this.servers[index - 1]) < 0) {
+                this.bubbleUp(index);
+            } else if (index < this.servers.length - 1 && comparator(this.servers[index], this.servers[index + 1]) > 0) {
+                this.bubbleDown(index);
+            }
+        }
+    }
+    
+    // Bubble-up method (shift the element up if it's smaller than its predecessor)
+    private bubbleUp(index: number): void {
+        const element = this.servers[index];
+        while (index > 0 && this.sortComparator(element, this.servers[index - 1]) < 0) {
+            this.servers[index] = this.servers[index - 1];
+            index--;
+        }
+        this.servers[index] = element;
+    }
+    
+    // Bubble-down method (shift the element down if it's larger than its successor)
+    private bubbleDown(index: number): void {
+        const element = this.servers[index];
+        while (
+            index < this.servers.length - 1 &&
+            this.sortComparator(element, this.servers[index + 1]) > 0
+        ) {
+            this.servers[index] = this.servers[index + 1];
+            index++;
+        }
+        this.servers[index] = element;
+    }
+    
 
 }

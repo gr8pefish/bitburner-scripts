@@ -5,15 +5,15 @@ import { Job, ServerSubset } from "../core/datatypes";
 
 
 export async function main(ns: NS) {
-    // disableLog(ns);
+    disableLog(ns);
     ns.tail();
 
     const script = SHARE_SCRIPT_LOCATION;
-    const threads = 3;
+    const threads = 1;
     const ramCost = ns.getScriptRam(script) * threads;
     const ramnet = new RamNetwork(ns, ServerSubset.NOT_OWNED, freeRamPredicate(ramCost));
     ramnet.print();
-    ramnet.execNetworkMultiple([new Job(script, threads), new Job(script, threads*4)], {verbose: true})
+    await ramnet.execNetworkMultiple([new Job(script, threads), new Job(script, threads), new Job(script, threads), new Job(script, threads*4)], {verbose: true})
     ramnet.print(); //TODO: doesn't quite update right
 
     
