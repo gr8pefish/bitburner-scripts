@@ -67,8 +67,8 @@ export class Job {
         public scriptName: string,
         public threads: number = 1,
         public args: ScriptArg[] = [],
-        // public hostName?: string,
-        // public pid?: number,
+        public hostname?: string,
+        public pid?: number,
     ) {};
     print(ns: NS) {
         ns.printf(`JOB: ${this.scriptName} with ${this.threads} threads and args [${this.args}]`);// on ${this.hostName} with pid ${this.pid}`);
@@ -168,6 +168,11 @@ export class ServerRamNetwork {
         }
     }
 
+    private getEffectiveFreeRam(server: Server): number {
+        const simulatedUsedRam = this.simulatedAddtlRamUsed.get(server.hostname) || 0;
+        return server.maxRam - (server.ramUsed + simulatedUsedRam);
+    }
+
     // private filterSortInPlace(source: Server[], filterPredicates?: ((server: Server) => boolean)[], sortComparator?: (a: Server, b: Server) => number): void {
     //     const predicates = filterPredicates || [this.filterPredicate];
     //     const comparator = sortComparator || this.sortComparator;
@@ -201,8 +206,11 @@ export class ServerRamNetwork {
     public constructor(serverList: Server[], sortComparator?: (a: Server, b: Server) => number, filterPredicate?: (server: Server) => boolean) {
         // Default comparator orders by maxRam ascending, including any simulated ram too if relevant
         const defaultSortComparator = (a: Server, b: Server) => {
+            this.getEffectiveFreeRam(a) - this.getEffectiveFreeRam(b);
             const simulated = (server: Server) => this.simulatedAddtlRamUsed.get(server.hostname) || 0;
-            return (a.maxRam + simulated(a)) - (b.maxRam + simulated(b));
+            const effectiveRamA = a.maxRam - (a.ramUsed + simulated(a));
+            const effectiveRamB = b.maxRam - (b.ramUsed + simulated(b));
+            return effectiveRamA - effectiveRamB; // Sort by ascending effective RAM
         };
         // Default filtering of freeFram > 1(gb)
         const defaultFilterPredicate = (server: Server) => server.hasAdminRights && server.maxRam - server.ramUsed >= 1;
@@ -334,6 +342,21 @@ export class ServerRamNetwork {
         return this.servers.find(predicate);
     }
 
+    //TODO: merge somehow, so it always includes simulated?
+    public getNextSimulatedMatching(ramBlockMin: number): Server | undefined {
+        const predicate = (server: Server) => {
+            // Calculate effective RAM available after considering simulated usage
+            const simulatedUsedRam = this.simulatedAddtlRamUsed.get(server.hostname) || 0;
+            const effectiveFreeRam = server.maxRam - (server.ramUsed + simulatedUsedRam);
+    
+            // Return true if effective free RAM meets or exceeds the required block
+            return effectiveFreeRam >= ramBlockMin;
+        };
+    
+        // Find and return the first matching server
+        return this.servers.find(predicate);
+    }
+
     // Get all servers (may not be updated)
     public getAll(): Server[] {
         return this.servers;
@@ -350,8 +373,13 @@ export class ServerRamNetwork {
     public toPrintString(ns: NS): string {
         let returnString = `ServerRam Network\n${"-".repeat(20)}\nServer Name        |  Free RAM\n${"-".repeat(10)}\n`;
         for (const server of this.servers) {
+            const simulated = this.simulatedAddtlRamUsed.get(server.hostname) || 0;
             const freeRam = server.maxRam - server.ramUsed;
-            returnString += server.hostname.padEnd(19) + "| " + ns.formatRam(freeRam).padStart(9) + "\n";
+            returnString += server.hostname.padEnd(19) + "| " + ns.formatRam(freeRam).padStart(9)
+            if (simulated > 0) {
+                 returnString += " (" + ns.formatRam(simulated)+ ")";
+            }
+            returnString += "\n"
         }
         return returnString;
     }
