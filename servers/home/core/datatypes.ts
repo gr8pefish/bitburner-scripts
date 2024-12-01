@@ -168,11 +168,6 @@ export class ServerRamNetwork {
         }
     }
 
-    private getEffectiveFreeRam(server: Server): number {
-        const simulatedUsedRam = this.simulatedAddtlRamUsed.get(server.hostname) || 0;
-        return server.maxRam - (server.ramUsed + simulatedUsedRam);
-    }
-
     // private filterSortInPlace(source: Server[], filterPredicates?: ((server: Server) => boolean)[], sortComparator?: (a: Server, b: Server) => number): void {
     //     const predicates = filterPredicates || [this.filterPredicate];
     //     const comparator = sortComparator || this.sortComparator;
@@ -206,14 +201,10 @@ export class ServerRamNetwork {
     public constructor(serverList: Server[], sortComparator?: (a: Server, b: Server) => number, filterPredicate?: (server: Server) => boolean) {
         // Default comparator orders by maxRam ascending, including any simulated ram too if relevant
         const defaultSortComparator = (a: Server, b: Server) => {
-            this.getEffectiveFreeRam(a) - this.getEffectiveFreeRam(b);
-            const simulated = (server: Server) => this.simulatedAddtlRamUsed.get(server.hostname) || 0;
-            const effectiveRamA = a.maxRam - (a.ramUsed + simulated(a));
-            const effectiveRamB = b.maxRam - (b.ramUsed + simulated(b));
-            return effectiveRamA - effectiveRamB; // Sort by ascending effective RAM
+            return this.getEffectiveFreeRam(a) - this.getEffectiveFreeRam(b); // Sort by ascending effective RAM
         };
         // Default filtering of freeFram > 1(gb)
-        const defaultFilterPredicate = (server: Server) => server.hasAdminRights && server.maxRam - server.ramUsed >= 1;
+        const defaultFilterPredicate = (server: Server) => server.hasAdminRights && this.getEffectiveFreeRam(server) >= 1;
 
         this.sortComparator = sortComparator || defaultSortComparator;
         this.filterPredicate = filterPredicate || defaultFilterPredicate;
@@ -250,8 +241,9 @@ export class ServerRamNetwork {
 
     //TODO: a method for update/add simulated necessary?
 
-    public setSimulated(serverName: string, addtlSimulatedRamUse: number) {
-        this.simulatedAddtlRamUsed.set(serverName, addtlSimulatedRamUse);
+    public addSimulated(serverName: string, addtlSimulatedRamUse: number) {
+        const newRamUse = this.simulatedAddtlRamUsed.has(serverName) ? this.simulatedAddtlRamUsed.get(serverName) + addtlSimulatedRamUse : addtlSimulatedRamUse;
+        this.simulatedAddtlRamUsed.set(serverName, newRamUse);
         this.reSort();
     }
 
@@ -264,37 +256,37 @@ export class ServerRamNetwork {
 
     // Update an existing server using a subset of servers and returns the updated subset, filtered and sorted
     //TODO: more simulation
-    private update(server: Server, serverList: Server[]): Server[] {
-        const subsetIndex = serverList.findIndex(s => s.hostname === server.hostname);
+    // private update(server: Server, serverList: Server[]): Server[] {
+    //     const subsetIndex = serverList.findIndex(s => s.hostname === server.hostname);
 
-        // Remove the server from both lists if it doesn't satisfy the filtering comparator
-        if (!this.filterPredicate(server)) {
-            if (subsetIndex !== -1) serverList.splice(subsetIndex, 1);
-            const mainIndex = this.servers.findIndex(s => s.hostname === server.hostname);
-            if (mainIndex !== -1) this.servers.splice(mainIndex, 1);
+    //     // Remove the server from both lists if it doesn't satisfy the filtering comparator
+    //     if (!this.filterPredicate(server)) {
+    //         if (subsetIndex !== -1) serverList.splice(subsetIndex, 1);
+    //         const mainIndex = this.servers.findIndex(s => s.hostname === server.hostname);
+    //         if (mainIndex !== -1) this.servers.splice(mainIndex, 1);
 
-            return serverList.sort(this.sortComparator);
-        }
+    //         return serverList.sort(this.sortComparator);
+    //     }
 
-        // Update the server in the subset
-        if (subsetIndex !== -1) {
-            serverList.splice(subsetIndex, 1); // Remove the old entry
-        }
-        serverList.push(server);
+    //     // Update the server in the subset
+    //     if (subsetIndex !== -1) {
+    //         serverList.splice(subsetIndex, 1); // Remove the old entry
+    //     }
+    //     serverList.push(server);
 
-        // Update the server in the main list
-        const mainIndex = this.servers.findIndex(s => s.hostname === server.hostname);
-        if (mainIndex !== -1) {
-            this.servers.splice(mainIndex, 1); // Remove the old entry
-        }
-        this.servers.push(server);
+    //     // Update the server in the main list
+    //     const mainIndex = this.servers.findIndex(s => s.hostname === server.hostname);
+    //     if (mainIndex !== -1) {
+    //         this.servers.splice(mainIndex, 1); // Remove the old entry
+    //     }
+    //     this.servers.push(server);
 
-        // Sort both lists by the ordering comparator
-        serverList.sort(this.sortComparator);
-        this.servers.sort(this.sortComparator);
+    //     // Sort both lists by the ordering comparator
+    //     serverList.sort(this.sortComparator);
+    //     this.servers.sort(this.sortComparator);
 
-        return serverList;
-    }
+    //     return serverList;
+    // }
 
     // // Add or update a server in the ordered set, simply unnecessary?
     // public upsert(server: Server): void {
@@ -320,6 +312,11 @@ export class ServerRamNetwork {
     
     //---------------------- Getters --------------------------
 
+    public getEffectiveFreeRam(server: Server): number {
+        const simulatedUsedRam = this.simulatedAddtlRamUsed.get(server.hostname) || 0;
+        return server.maxRam - (server.ramUsed + simulatedUsedRam);
+    }
+
     // Get a subset of servers based on filtering predicate (combines with default filtering comparator, and returns sorted)
     // NOTE: MODIFIES BASE SERVER LIST
     private getSubset(filterPredicate: (server: Server) => boolean): Server[] {
@@ -334,50 +331,57 @@ export class ServerRamNetwork {
     }
 
 
-    public getNext(): Server {
+    // relatively unsafe
+    public getNextDirectly(): Server {
         return this.servers[0];
     }
 
-    public getNextMatching(predicate: (server: Server) => boolean): Server {
-        return this.servers.find(predicate);
+    // Automatically applies simulated to ram counts
+    public getNextMatching(predicate: (server: Server) => boolean): Server | undefined {
+        return this.servers.find(server =>
+            predicate({
+                ...server,
+                ramUsed: server.ramUsed + (this.simulatedAddtlRamUsed.get(server.hostname) || 0),
+            })
+        );
     }
 
-    //TODO: merge somehow, so it always includes simulated?
-    public getNextSimulatedMatching(ramBlockMin: number): Server | undefined {
-        const predicate = (server: Server) => {
-            // Calculate effective RAM available after considering simulated usage
-            const simulatedUsedRam = this.simulatedAddtlRamUsed.get(server.hostname) || 0;
-            const effectiveFreeRam = server.maxRam - (server.ramUsed + simulatedUsedRam);
+    // //TODO: merge somehow, so it always includes simulated?
+    // public getNextSimulatedMatching(ramBlockMin: number): Server | undefined {
+    //     const predicate = (server: Server) => {
+    //         // Calculate effective RAM available after considering simulated usage
+    //         const simulatedUsedRam = this.simulatedAddtlRamUsed.get(server.hostname) || 0;
+    //         const effectiveFreeRam = server.maxRam - (server.ramUsed + simulatedUsedRam);
     
-            // Return true if effective free RAM meets or exceeds the required block
-            return effectiveFreeRam >= ramBlockMin;
-        };
+    //         // Return true if effective free RAM meets or exceeds the required block
+    //         return effectiveFreeRam >= ramBlockMin;
+    //     };
     
-        // Find and return the first matching server
-        return this.servers.find(predicate);
-    }
+    //     // Find and return the first matching server
+    //     return this.servers.find(predicate);
+    // }
 
     // Get all servers (may not be updated)
-    public getAll(): Server[] {
+    public getAllWithoutSimulated(): Server[] {
         return this.servers;
     }
 
-    // Get all servers (updated)
-    private getAllUpdated(): Server[] {
-        this.reSort();
-        return this.servers;
-    }
+    // // Get all servers (updated)
+    // private getAllUpdated(): Server[] {
+    //     this.reSort();
+    //     return this.servers;
+    // }
 
     //---------------------- Display --------------------------
     
     public toPrintString(ns: NS): string {
-        let returnString = `ServerRam Network\n${"-".repeat(20)}\nServer Name        |  Free RAM\n${"-".repeat(10)}\n`;
+        let returnString = `ServerRam Network\n${"-".repeat(65)}\nServer Name        | Free RAM   |  (Max - Simulated + Used) \n${"-".repeat(65)}\n`;
         for (const server of this.servers) {
+            returnString += server.hostname.padEnd(19) + "| " + ns.formatRam(this.getEffectiveFreeRam(server)).padStart(9);
+
             const simulated = this.simulatedAddtlRamUsed.get(server.hostname) || 0;
-            const freeRam = server.maxRam - server.ramUsed;
-            returnString += server.hostname.padEnd(19) + "| " + ns.formatRam(freeRam).padStart(9)
             if (simulated > 0) {
-                 returnString += " (" + ns.formatRam(simulated)+ ")";
+                 returnString += "  |  (" + ns.formatRam(server.maxRam) + " - " + ns.formatRam(simulated) + " + " +  ns.formatRam(server.ramUsed) + ")";
             }
             returnString += "\n"
         }

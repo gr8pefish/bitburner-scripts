@@ -209,6 +209,7 @@ export function getServerObjects(
 
 /**
  * Generates a predicate to filter servers by free RAM.
+ * Use caution when using with ServerRamNetwork, due to simulated (though most use cases should be covered automatically now).
  * @param {number} minFreeRam - Minimum free RAM in GB.
  * @returns {(server: Server) => boolean} - A predicate function.
  */
@@ -229,8 +230,9 @@ export class RamNetwork {
     }
 
     //assumes that threads * scriptName is <= than the current filtering
-    private execute(host = this.network.getNext(), scriptName: string, threads: number, args: ScriptArg[], removeSimulated = true): number {
-        
+    //TODO: remove host call, use hostname instead?
+    private execute(hostname = this.network.getNextDirectly().hostname, scriptName: string, threads: number, args: ScriptArg[], removeSimulated = true): number {
+        const host = this.ns.getServer(hostname);
         // Error checking/printing
         if ((host.maxRam - host.ramUsed) < this.ns.getScriptRam(scriptName) * threads) { 
             throw Error(`ERROR Not enough RAM to exec on the given script!\n${host.hostname} | ${scriptName}\n Free RAM: ${this.ns.formatRam(host.maxRam - host.ramUsed)} | Needs: ${this.ns.getScriptRam(scriptName) * threads})`);
@@ -239,7 +241,7 @@ export class RamNetwork {
         
         // Call exec
         const pid = this.ns.exec(scriptName, host.hostname, threads, ...args);
-        
+
         // Update the network
         const updatedServerObject = this.ns.getServer(host.hostname);
         this.network.updateAfterExec(updatedServerObject, removeSimulated); //should re-sort too
@@ -249,7 +251,7 @@ export class RamNetwork {
 
     public execNetworkPercent(scriptName: string, percentFreeRamUsage: number): number {
         const scriptRamUsage = this.ns.getScriptRam(scriptName);
-        const totalFreeRam = this.network.getAll().reduce((total, server) => total + (server.maxRam - server.ramUsed), 0);
+        const totalFreeRam = this.network.getAllWithoutSimulated().reduce((total, server) => total + (server.maxRam - server.ramUsed), 0);
         const usedRam = 0;
         const ramToFill = Math.floor(totalFreeRam * percentFreeRamUsage);
         while (usedRam <= ramToFill) {
@@ -258,37 +260,74 @@ export class RamNetwork {
         return -1;
     }
 
-    public execNetwork(job: Job, options?: { partial?: boolean; verbose?: boolean }): number {
-        const { partial = false, verbose = false } = options || {};
-        return this.execNetworkMultiple([job], {partial, verbose})[0];
+    public execNetwork(job: Job, options?: { mergeThreads?: boolean, partialHosts?: boolean; verbose?: boolean }): number {
+        const { mergeThreads = true, partialHosts = false, verbose = false } = options || {};
+        return this.execNetworkMultiple([job], {mergeThreads, partialHosts, verbose})[0];
     }
 
-    public execNetworkMultiple(jobs: Job[], options?: { partial?: boolean; verbose?: boolean }): number[] {
-        const { partial = false, verbose = false } = options || {};
+    public execNetworkMultiple(jobs: Job[], options?: { mergeThreads?: boolean, partialHosts?: boolean; verbose?: boolean }): number[] {
+        const { mergeThreads = true, partialHosts = false, verbose = false } = options || {};
         const pids: number[] = [];
         for (const job of jobs) { //for each job
             if (verbose) job.print(this.ns);
             const ramBlockSize = this.ns.getScriptRam(job.scriptName) * job.threads; //get the ram block size
-            let jobHosts: Server[] = [];
-            if (partial) {
+            if (partialHosts) {
                 //TODO: partial, can also introduce multiple pids so account for that //get best multiple hosts to fit that ramBlock
+                // let jobHostNames: string[] = [];
             } else {
                 const host = this.network.getNextMatching(freeRamPredicate(ramBlockSize)); //get the best single host that can fit that ramBlock
                 if (!host) {
                     this.ns.printf(`WARN NO HOSTS FOUND! Need network with a free block of ${this.ns.formatRam(ramBlockSize)}`)
                 } else {
-                    jobHosts.push(host);
-                    if (verbose) this.ns.printf(`Found ${host.hostname} with ${this.ns.formatRam(host.maxRam - host.ramUsed)} free, to fill the block of ${this.ns.formatRam(ramBlockSize)}`);
-                    this.network.setSimulated(host.hostname, ramBlockSize);
-                    this.print();
+                    job.hostname = host.hostname;
+                    if (verbose) {
+                        this.ns.printf(`Found ${host.hostname} with ${this.ns.formatRam(this.network.getEffectiveFreeRam(host))} free, to fill the block of ${this.ns.formatRam(ramBlockSize)}`);
+                        this.ns.printf("Setting simulated (+ re-ordering):");
+                        this.network.addSimulated(host.hostname, ramBlockSize);
+                        this.ns.printf("New order:");
+                        this.print();
+                    }
                 }
             }
-            for (const host of jobHosts) {
-                const pid = this.execute(host, job.scriptName, job.threads, job.args); //exec on the found host(s)
-                pids.push(pid);
-            }
+        }
+
+        if (mergeThreads) jobs = this.mergeJobThreads(jobs);
+        for (const job of jobs) {
+            const pid = this.execute(job.hostname, job.scriptName, job.threads, job.args); //exec on the found host(s)
+            pids.push(pid);
         }
         return pids;
+
+    }
+
+    private mergeJobThreads(jobs: Job[]): Job[] {
+        // Create a Map to aggregate thread counts by hostname
+        const hostMap = new Map<string, { threads: number; args: ScriptArg[]; scriptName: string }>();
+
+        // Iterate through the jobs and merge thread counts for the same hostname
+        for (const job of jobs) {
+            if (!job.hostname) continue; // Skip jobs with no hostname
+
+            const existing = hostMap.get(job.hostname);
+
+            if (existing) {
+                // Merge threads and ensure arguments and script name remain consistent
+                existing.threads += job.threads;
+            } else {
+                // Add a new entry to the map
+                hostMap.set(job.hostname, {
+                    threads: job.threads,
+                    args: job.args,
+                    scriptName: job.scriptName
+                });
+            }
+        }
+
+        // Convert the Map back to an array of Job objects
+        return Array.from(hostMap.entries()).map(
+            ([hostname, { threads, args, scriptName }]) =>
+                new Job(scriptName, threads, args, hostname)
+        );
     }
 
     print() {

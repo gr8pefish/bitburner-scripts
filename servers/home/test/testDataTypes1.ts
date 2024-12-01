@@ -13,8 +13,8 @@ export async function main(ns: NS) {
     const ramCost = ns.getScriptRam(script) * threads;
     const ramnet = new RamNetwork(ns, ServerSubset.NOT_OWNED, freeRamPredicate(ramCost));
     ramnet.print();
-    await ramnet.execNetworkMultiple([new Job(script, threads), new Job(script, threads), new Job(script, threads), new Job(script, threads*4)], {verbose: true})
-    ramnet.print(); //TODO: doesn't quite update right
+    ramnet.execNetworkMultiple([new Job(script, threads), new Job(script, threads), new Job(script, threads), new Job(script, threads*4)], {verbose: true})
+    ramnet.print(); //works!
 
     
     // ramnet.execNetwork(new Job(script, threads), {verbose: true});
