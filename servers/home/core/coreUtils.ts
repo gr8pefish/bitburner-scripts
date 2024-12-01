@@ -228,10 +228,8 @@ export class RamNetwork {
         this.ns = ns;
     }
 
-
-
     //assumes that threads * scriptName is <= than the current filtering
-    private async execute(host = this.network.getNext(), scriptName: string, threads: number, args: ScriptArg[], removeSimulated = true): Promise<number> {
+    private execute(host = this.network.getNext(), scriptName: string, threads: number, args: ScriptArg[], removeSimulated = true): number {
         
         // Error checking/printing
         if ((host.maxRam - host.ramUsed) < this.ns.getScriptRam(scriptName) * threads) { 
@@ -249,7 +247,7 @@ export class RamNetwork {
         return pid;
     }
 
-    public async execNetworkPercent(scriptName: string, percentFreeRamUsage: number): Promise<number> {
+    public execNetworkPercent(scriptName: string, percentFreeRamUsage: number): number {
         const scriptRamUsage = this.ns.getScriptRam(scriptName);
         const totalFreeRam = this.network.getAll().reduce((total, server) => total + (server.maxRam - server.ramUsed), 0);
         const usedRam = 0;
@@ -260,12 +258,12 @@ export class RamNetwork {
         return -1;
     }
 
-    public async execNetwork(job: Job, options?: { partial?: boolean; verbose?: boolean }): Promise<number> {
+    public execNetwork(job: Job, options?: { partial?: boolean; verbose?: boolean }): number {
         const { partial = false, verbose = false } = options || {};
-        return await this.execNetworkMultiple([job], {partial, verbose})[0];
+        return this.execNetworkMultiple([job], {partial, verbose})[0];
     }
 
-    public async execNetworkMultiple(jobs: Job[], options?: { partial?: boolean; verbose?: boolean }): Promise<number[]> {
+    public execNetworkMultiple(jobs: Job[], options?: { partial?: boolean; verbose?: boolean }): number[] {
         const { partial = false, verbose = false } = options || {};
         const pids: number[] = [];
         for (const job of jobs) { //for each job
@@ -286,7 +284,7 @@ export class RamNetwork {
                 }
             }
             for (const host of jobHosts) {
-                const pid = await this.execute(host, job.scriptName, job.threads, job.args); //exec on the found host(s)
+                const pid = this.execute(host, job.scriptName, job.threads, job.args); //exec on the found host(s)
                 pids.push(pid);
             }
         }
