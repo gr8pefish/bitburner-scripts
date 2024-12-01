@@ -118,7 +118,8 @@ async function exploit(ns: NS, target: string, leechPercent: number, print = fal
     const BUFFER_BATCH_MS = 100;
     
     const assumedMoneyGainPerSecond = ns.getServerMaxMoney(target) * leechPercent / (startEndTimes.weaken2End * 1000)
-    ns.printf(`$/min: ${ns.formatNumber(assumedMoneyGainPerSecond*60)} | Sleeping: ${ns.tFormat(startEndTimes.weaken2End + BUFFER_BATCH_MS)}`);
+    const totalRamUsage = ramBlocks.growRamBlock + ramBlocks.weaken1RamBlock + ramBlocks.hackRamBlock + ramBlocks.weaken2RamBlock;
+    ns.printf(`$/min: ${ns.formatNumber(assumedMoneyGainPerSecond*60)} | RAM: ${ns.formatRam(totalRamUsage)} | Sleeping: ${ns.tFormat(startEndTimes.weaken2End + BUFFER_BATCH_MS)}`);
     await ns.sleep(startEndTimes.weaken2End + BUFFER_BATCH_MS);
 
 }
