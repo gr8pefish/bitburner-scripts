@@ -129,13 +129,13 @@ export async function main(ns: NS) {
 
     const target = ns.args[0] as string;
     // const targetCount = ns.args[1] as number || 9;
-    const leechPercent = ns.args[1] as number || 0.1;
+    const leechPercent = ns.args[1] as number || 0.9;
     const print = ns.args[2] as boolean || false;
 
     if (target == 'ALL') {
         const targets = getBestTargetsNaiive(ns, 10, true);
         for (const target of targets) {
-            ns.run('hack/controllers/protobatcher.js', {}, target); //TODO: hardcoded
+            ns.run('hack/controllers/protobatcher.js', {}, target, leechPercent); //TODO: hardcoded
         }
     } else {
 
