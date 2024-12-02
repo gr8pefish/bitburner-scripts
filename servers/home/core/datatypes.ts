@@ -244,6 +244,7 @@ export class ServerRamNetwork {
     public addSimulated(serverName: string, addtlSimulatedRamUse: number) {
         const newRamUse = this.simulatedAddtlRamUsed.has(serverName) ? this.simulatedAddtlRamUsed.get(serverName) + addtlSimulatedRamUse : addtlSimulatedRamUse;
         this.simulatedAddtlRamUsed.set(serverName, newRamUse);
+        // reSortAroundIndex TODO: optimize for reSortFull only when needed
         this.reSort();
     }
 
