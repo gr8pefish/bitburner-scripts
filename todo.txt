@@ -1,12 +1,16 @@
 Misc:
 - cleanup mirroring (remove local files?)
 - debug imports increasing ram cost (e.g. share disableLog)
+- find extra job print statements and remove/conditionalize
 
 
 Scripts:
 - integrate & test ram network w/ helper scripts
     - needs optional split batch param for earlygame
-    - also needs helper method to just assign/exec a job and update internals (do this myself)
+
+- continue dynamic data type refactor
+
+- get server path and backdooring
 
 - earlygame ram-efficient scripts (e.g. batching, xp)
 
