@@ -21,7 +21,7 @@ export async function main(ns: NS) {
     if (growThreadCount > 0) {
         while (true) {
             ns.run(script, growThreadCount, target);
-            await ns.sleep(getHgwExecTimes(ns, target).GrowTime + BUFFER_MS);
+            await ns.sleep(getHgwExecTimes(ns, target).grow + BUFFER_MS);
         }
     }
 

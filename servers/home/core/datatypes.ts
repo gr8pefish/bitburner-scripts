@@ -1,45 +1,82 @@
 import { ScriptArg, Server } from "@/NetscriptDefinitions";
-import { HWGW_CONSTANTS, HWGW_TYPES } from "./constants";
+import { HWGW_CONSTANTS, HWGW_TYPE, HWGW_TYPES } from "./constants";
 
 export class HWGW_ThreadCounts {
     constructor(
-        public hackThreads: number = 0,
-        public weaken1Threads: number = 0,
-        public growThreads: number = 0,
-        public weaken2Threads: number = 0,
+        public hack: number = 0,
+        public weaken1: number = 0,
+        public grow: number = 0,
+        public weaken2: number = 0,
     ) {};
     print(ns: NS) {
-        ns.printf(`Hack Threads:    ${this.hackThreads}`);
-        ns.printf(`Weaken1 Threads: ${this.weaken1Threads}`);
-        ns.printf(`Grow Threads:    ${this.growThreads}`);
-        ns.printf(`Weaken2 Threads: ${this.weaken2Threads}`);
+        ns.printf(`Hack Threads:    ${this.hack}`);
+        ns.printf(`Weaken1 Threads: ${this.weaken1}`);
+        ns.printf(`Grow Threads:    ${this.grow}`);
+        ns.printf(`Weaken2 Threads: ${this.weaken2}`);
     }
 }
 
 export type HackTimes = {
-    HackTime: number;
-    GrowTime: number;
-    WeakenTime: number;
+    hack: number;
+    grow: number;
+    weaken: number;
 }
 
 export class HWGW_StartEndTimes {
-    constructor(
-        public hackStart: number = 0,
-        public hackEnd: number = 0,
-        public weaken1Start: number = 0,
-        public weaken1End: number = 0,
-        public growStart: number = 0,
-        public growEnd: number = 0,
-        public weaken2Start: number = 0,
-        public weaken2End: number = 0,
-    ) {};
-    print(ns: NS) {
-        ns.printf(`Hack:    ${ns.tFormat(this.hackStart, true)} -> ${ns.tFormat(this.hackEnd, true)}: (${ns.tFormat(this.hackEnd - this.hackStart, true)})`);
-        ns.printf(`Weaken1: ${ns.tFormat(this.weaken1Start, true)} -> ${ns.tFormat(this.weaken1End, true)}: (${ns.tFormat(this.weaken1End - this.weaken1Start, true)})`);
-        ns.printf(`Grow:    ${ns.tFormat(this.growStart, true)} -> ${ns.tFormat(this.growEnd, true)}: (${ns.tFormat(this.growEnd - this.growStart, true)})`);
-        ns.printf(`Weaken2: ${ns.tFormat(this.weaken2Start, true)} -> ${ns.tFormat(this.weaken2End, true)}: (${ns.tFormat(this.weaken2End - this.weaken2Start, true)})`);
+    // Define types dynamically based on HWGW_CONSTANTS
+    [key: string]: { start: number; end: number };
+
+    constructor() {
+        for (const type of HWGW_TYPES) {
+            this[type] = { start: 0, end: 0 }; // Default start and end values
+        }
     }
+
+    //@ts-ignore (due to dynamic assignment)
+    print(ns: NS): void {
+        for (const type of HWGW_TYPES) {
+            const { start, end } = this[type];
+            ns.printf(`${type}: ${ns.tFormat(start, true)} -> ${ns.tFormat(end, true)}: (${ns.tFormat(end - start, true)})`);
+        }
+    }
+    
 }
+
+// export class HWGW_StartEndTimes {
+//     // Define the structure as a Record with keys from HWGW_TYPE
+//     private times: Record<HWGW_TYPE, { start: number; end: number }>;
+
+//     constructor() {
+//         this.times = {
+//             [HWGW_TYPE.hack]: { start: 0, end: 0 },
+//             [HWGW_TYPE.weaken1]: { start: 0, end: 0 },
+//             [HWGW_TYPE.grow]: { start: 0, end: 0 },
+//             [HWGW_TYPE.weaken2]: { start: 0, end: 0 },
+//         };
+//     }
+
+//     // Accessor to ensure strict typing
+//     get(key: HWGW_TYPE): { start: number; end: number } {
+//         return this.times[key];
+//     }
+
+//     // Mutator to update values
+//     set(key: HWGW_TYPE, start: number, end: number): void {
+//         this.times[key] = { start, end };
+//     }
+
+//     print(ns: NS): void {
+//         for (const [type, { start, end }] of Object.entries(this.times) as [HWGW_TYPE, { start: number; end: number }][]) {
+//             ns.printf(
+//                 `${type}: ${ns.tFormat(start, true)} -> ${ns.tFormat(end, true)}: (${ns.tFormat(
+//                     end - start,
+//                     true
+//                 )})`
+//             );
+//         }
+//     }
+// }
+
 
 export class HWGW_RamBlocks {
     threadCounts: HWGW_ThreadCounts;
@@ -49,10 +86,10 @@ export class HWGW_RamBlocks {
     weaken2RamBlock: number;
     constructor(threadCounts: HWGW_ThreadCounts) {
         this.threadCounts = threadCounts;
-        this.hackRamBlock = this.threadCounts.hackThreads * HWGW_CONSTANTS.hack.RAM_COST;
-        this.weaken1RamBlock = this.threadCounts.weaken1Threads * HWGW_CONSTANTS.weaken1.RAM_COST;
-        this.growRamBlock = this.threadCounts.growThreads * HWGW_CONSTANTS.grow.RAM_COST;
-        this.weaken2RamBlock = this.threadCounts.weaken2Threads * HWGW_CONSTANTS.weaken2.RAM_COST;
+        this.hackRamBlock = this.threadCounts.hack * HWGW_CONSTANTS.hack.RAM_COST;
+        this.weaken1RamBlock = this.threadCounts.weaken1 * HWGW_CONSTANTS.weaken1.RAM_COST;
+        this.growRamBlock = this.threadCounts.grow * HWGW_CONSTANTS.grow.RAM_COST;
+        this.weaken2RamBlock = this.threadCounts.weaken2 * HWGW_CONSTANTS.weaken2.RAM_COST;
     };
     print(ns: NS) {
         ns.printf(`Hack RAM block size:    ${ns.formatRam(this.hackRamBlock)}`);
@@ -71,10 +108,35 @@ export class Job {
         public pid?: number,
     ) {};
     print(ns: NS) {
-        ns.printf(`JOB: ${this.scriptName} with ${this.threads} threads and args [${this.args}]`);// on ${this.hostName} with pid ${this.pid}`);
+        ns.printf(`JOB: ${this.scriptName} with ${this.threads} threads and args [${this.args}] on ${this?.hostname}`);
     }
 }
 
+//redo all these classes
+export class Batch_Job extends Job {
+    constructor(
+        scriptName: string,
+        threads: number = 1,
+        public hwgw_type: HWGW_TYPE, // Define the HWGW type
+        public targetServer: string,
+        public startTime: number,
+        public endTime: number,
+        hostname?: string,
+        pid?: number,
+    ) {
+        // Automatically set args to [startTime, endTime]
+        super(scriptName, threads, [targetServer, startTime, endTime], hostname, pid);
+    }
+
+    print(ns: NS): void {
+        super.print(ns); // Call the parent class's print method
+        ns.printf(
+            `Batch Type: ${this.hwgw_type}, Start Time: ${this.startTime}, End Time: ${this.endTime}`
+        );
+    }
+}
+
+//TODO: extend Job base instead
 export class HWGW_Job {
     constructor (
         public hwgw_type: typeof HWGW_TYPES[number], //h, w1, g, w2
@@ -320,7 +382,7 @@ export class ServerRamNetwork {
 
     // Get a subset of servers based on filtering predicate (combines with default filtering comparator, and returns sorted)
     // NOTE: MODIFIES BASE SERVER LIST
-    private getSubset(filterPredicate: (server: Server) => boolean): Server[] {
+    public setSubset(filterPredicate: (server: Server) => boolean): Server[] {
         return this.getSubsetMult([this.filterPredicate, filterPredicate]);
     }
 
@@ -334,7 +396,12 @@ export class ServerRamNetwork {
 
     // relatively unsafe
     public getNextDirectly(): Server {
-        return this.servers[0];
+        return this.servers.at(0);
+    }
+
+    // relatively unsafe
+    public getLastDirectly(): Server {
+        return this.servers.at(-1);
     }
 
     // Automatically applies simulated to ram counts
