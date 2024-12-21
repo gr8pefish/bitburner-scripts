@@ -1,6 +1,6 @@
 import { NS, ScriptArg, Server } from "@/NetscriptDefinitions";
-import { DIST_DIR, HGW_DIR, HWGW_TYPE, HWGW_TYPES, SHARE_SCRIPT_LOCATION } from "./constants";
-import { Batch_Job, HWGW_Job, Job, MathRoundType, ServerRamNetwork, ServerSubset, serverSubsetPredicates } from "./datatypes";
+import { DIST_DIR, HGW_DIR, HWGW_TYPE } from "./constants";
+import { HWGW_Data, HWGW_Single_Job, Job, MathRoundType, ServerRamNetwork, ServerSubset, serverSubsetPredicates } from "./datatypes";
 
 /**
  * Clears and diables logging
@@ -83,7 +83,7 @@ export function rootServer(ns: NS, target: string): boolean {
  * @param serverList - a given list of all server names, otherwise it creates it
  */
 export function prepAllServers(ns: NS, serverList?: string[]) {
-    const servers = serverList ? serverList : getAllServers(ns, true);
+    const servers = serverList ? serverList : getAllServerNames(ns, true);
     const allFiles = ns.ls('home', DIST_DIR).concat(ns.ls('home', HGW_DIR))
     for (const server of servers) {
         rootServer(ns, server);
@@ -100,7 +100,7 @@ export function prepAllServers(ns: NS, serverList?: string[]) {
  * @param serverList - a given list of all server names, otherwise it creates it
  */
 export function updateServerRoots(ns: NS, serverList?: string[]) {
-    const servers = serverList ? serverList : getAllServers(ns, true);
+    const servers = serverList ? serverList : getAllServerNames(ns, true);
     for (const server of servers) {
         rootServer(ns, server);
     }
@@ -113,7 +113,7 @@ export function updateServerRoots(ns: NS, serverList?: string[]) {
  * @param removeHome 
  * @returns 
  */
-export function getAllServers(ns: NS, removeHome = true): Array<string> {
+export function getAllServerNames(ns: NS, removeHome = true): Array<string> {
 	const serversSet = new Set(["home"]);
 	serversSet.forEach(server => ns.scan(server).forEach(connectServer => serversSet.add(connectServer)));
 	if (removeHome) serversSet.delete("home");
@@ -269,7 +269,7 @@ export class RamNetwork {
     public execNetworkIterative(job: Job, totalThreads: number, options?: { mergeThreads?: boolean, partialHosts?: boolean; verbose?: boolean }): number[] {
         const { mergeThreads = true, partialHosts = false, verbose = false } = options || {};
         const pids: number[] = [];
-        const scriptRamUsage = this.ns.getScriptRam(job.scriptName);
+        const scriptRamUsage = job.getRamBlockSize(this.ns);
 
         let usedThreads = 0;
         let jobs: Job[] = [];
@@ -283,7 +283,7 @@ export class RamNetwork {
             const threadsPossible = Math.floor(this.network.getEffectiveFreeRam(nextServer) / scriptRamUsage);
             const threadsActual = threadsPossible > threadsToFill ? threadsToFill : threadsPossible;
             usedThreads += threadsActual;
-            jobs.push(new Job(job.scriptName, threadsActual, job.args, nextServer.hostname));
+            jobs.push(new Job(job.getScriptName(), threadsActual, job.getArgs(), nextServer.hostname));
             this.network.addSimulated(nextServer.hostname, threadsActual * scriptRamUsage);
         }
 
@@ -294,11 +294,11 @@ export class RamNetwork {
         }
 
         for (const job of jobs) {
-            const pid = this.execute(job.hostname, job.scriptName, job.threads, job.args); //exec on the found host(s)
+            const pid = this.execute(job.getHostname(), job.getScriptName(), job.getThreadCount(), job.getArgs()); //exec on the found host(s)
             pids.push(pid);
         }
 
-        this.ns.print(`Found ${usedThreads} threads of ${totalThreads} total for ${job.scriptName}`);
+        this.ns.print(`Found ${usedThreads} threads of ${totalThreads} total for ${job.getScriptName()}`);
 
         return pids;
     }
@@ -313,7 +313,7 @@ export class RamNetwork {
         const pids: number[] = [];
         for (const job of jobs) { //for each job
             if (verbose) job.print(this.ns);
-            const ramBlockSize = this.ns.getScriptRam(job.scriptName) * job.threads; //get the ram block size
+            const ramBlockSize = job.getRamBlockSize(this.ns);
             if (partialHosts) {
                 //TODO: partial, can also introduce multiple pids so account for that //get best multiple hosts to fit that ramBlock
                 // let jobHostNames: string[] = [];
@@ -322,7 +322,7 @@ export class RamNetwork {
                 if (!host) {
                     this.ns.printf(`WARN NO HOSTS FOUND! Need network with a free block of ${this.ns.formatRam(ramBlockSize)}`)
                 } else {
-                    job.hostname = host.hostname;
+                    job.setHostname(host.hostname);
                     if (verbose) {
                         this.ns.printf(`INFO Found ${host.hostname} with ${this.ns.formatRam(this.network.getEffectiveFreeRam(host))} free, to fill the block of ${this.ns.formatRam(ramBlockSize)}`);
                         this.ns.printf("Setting simulated (+ re-ordering):");
@@ -342,7 +342,7 @@ export class RamNetwork {
         }
 
         for (const job of jobs) {
-            const pid = this.execute(job.hostname, job.scriptName, job.threads, job.args); //exec on the found host(s)
+            const pid = this.execute(job.getHostname(), job.getScriptName(), job.getThreadCount(), job.getArgs()); //exec on the found host(s)
             pids.push(pid);
         }
 
@@ -350,14 +350,14 @@ export class RamNetwork {
 
     }
 
-    private mergeJobThreads(jobs: (Job | Batch_Job)[], verbose = false): (Job | Batch_Job)[] {
+    private mergeJobThreads(jobs: (Job | HWGW_Single_Job)[], verbose = false): (Job | HWGW_Single_Job)[] {
         const hostMap = new Map<
             string, // Composite key: hostname + job-specific properties
             {
                 threads: number;
                 args: ScriptArg[];
                 scriptName: string;
-                jobType: "Job" | "Batch_Job";
+                jobType: "Job" | "HWGW_Single_Job";
                 additionalProps?: {
                     hwgw_type?: HWGW_TYPE;
                     targetServer?: string;
@@ -368,13 +368,14 @@ export class RamNetwork {
         >();
     
         for (const job of jobs) {
-            if (!job.hostname) continue; // Skip jobs without a hostname
+            const hostname = job.getHostname();
+            if (!hostname) continue; // Skip jobs without a hostname
     
             // Generate a composite key for the job
             const compositeKey =
-                job.hostname +
-                (job instanceof Batch_Job
-                    ? `|${job.hwgw_type}|${job.targetServer}|${job.startTime}|${job.endTime}`
+                hostname +
+                (job instanceof HWGW_Single_Job
+                    ? `|${job.getHWGWtype()}|${job.getTargetServer()}|${job.getTimeStart()}|${job.getTimeEnd()}`
                     : "");
     
             const existing = hostMap.get(compositeKey);
@@ -382,51 +383,52 @@ export class RamNetwork {
             if (existing) {
                 // Merge threads for matching jobs
                 if (verbose) {
-                    this.ns.print(`Merging threads for: ${job.hostname}`);
+                    this.ns.print(`Merging threads for: ${hostname}`);
                     job.print(this.ns);
                 }
-                existing.threads += job.threads;
+                existing.threads += job.getThreadCount();
             } else {
                 // Add a new entry to the map
                 hostMap.set(compositeKey, {
-                    threads: job.threads,
-                    args: job.args,
-                    scriptName: job.scriptName,
-                    jobType: job instanceof Batch_Job ? "Batch_Job" : "Job",
-                    additionalProps: job instanceof Batch_Job
+                    threads: job.getThreadCount(),
+                    args: job.getArgs(),
+                    scriptName: job.getScriptName(),
+                    jobType: job instanceof HWGW_Single_Job ? "HWGW_Single_Job" : "Job",
+                    additionalProps: job instanceof HWGW_Single_Job
                         ? {
-                              hwgw_type: job.hwgw_type,
-                              targetServer: job.targetServer,
-                              startTime: job.startTime,
-                              endTime: job.endTime,
+                              hwgw_type: job.getHWGWtype(),
+                              targetServer: job.getTargetServer(),
+                              startTime: job.getTimeStart(),
+                              endTime: job.getTimeEnd(),
                           }
                         : undefined,
                 });
             }
         }
     
-        // Convert the map back to an array of Job or Batch_Job objects
+        // Convert the map back to an array of Job or HWGW_Single_Job objects
         return Array.from(hostMap.entries()).map(([compositeKey, { threads, args, scriptName, jobType, additionalProps }]) => {
-            if (jobType === "Batch_Job" && additionalProps) {
-                return new Batch_Job(
+            const hostname = compositeKey.split("|")[0]; // Extract hostname
+            if (jobType === "HWGW_Single_Job" && additionalProps) {
+                // Recreate an HWGW_Single_Job instance
+                const data = new HWGW_Data();
+                data.setTimes(additionalProps.hwgw_type!, additionalProps.startTime!, additionalProps.endTime!);
+                data.setThreads(additionalProps.hwgw_type!, threads);
+    
+                return new HWGW_Single_Job(
                     scriptName,
-                    threads,
                     additionalProps.hwgw_type!,
+                    data,
                     additionalProps.targetServer!,
-                    additionalProps.startTime!,
-                    additionalProps.endTime!,
-                    compositeKey.split("|")[0] // Extract hostname
+                    hostname
                 );
             } else {
-                return new Job(
-                    scriptName,
-                    threads,
-                    args,
-                    compositeKey.split("|")[0] // Extract hostname
-                );
+                // Recreate a generic Job instance
+                return new Job(scriptName, threads, args, hostname);
             }
         });
     }
+    
     
 
     public checkRamFit(minRamBlock: number, ramBlockArray: number[], verbose = false): boolean {
@@ -468,145 +470,3 @@ export class RamNetwork {
     }
 
 }
-
-
-// export namespace RamNetwork {
-
-//     // function addServer(ns: NS, serverName: string) {
-//     //     const freeRam = getFreeRAM(ns, serverName);
-//     //     ServerRamNetwork.getInstance().upsert({serverName, freeRam});
-//     // }
-
-//     export function initRamNetwork(ns: NS) {
-//         ServerRamNetwork.getInstance().addMultiple(getAllServers(ns, false));
-        
-//         getAllServers(ns, false);
-
-//         // ns.printf(ServerRamNetwork.getInstance().getPrintString(ns));
-//     }
-
-//     export function initRamNetworkSet(ns: NS) {
-//         // ns.getServer()
-//         // getAllServerObjects(ns, filterHasRoot)
-//     }
-
-//     function filterServersBySubset(subset: ServerSubset, servers: ServerRam[]): ServerRam[] {
-//         const predicate = serverSubsetPredicates[subset];
-//         return servers.filter(predicate);
-//     }
-
-//     function filterServersByRamMin(amount: number, servers: ServerRam[]): ServerRam[] {
-//         return servers.filter((server) => server.freeRam >= amount);
-//     }
-
-//     //TODO: convert to options param
-//     function filterServersByRamAndSubset(subset: ServerSubset, ramMin: number, servers: ServerRam[]): ServerRam[] {
-//         return filterServersByRamMin(ramMin, filterServersBySubset(subset, servers));
-//     }
-
-        
-//     //TODO partial is irrelevant here?
-//     //unlikely this will work
-//     function execNetwork(ns: NS, scriptName: string, subsetType: ServerSubset, percentAllocation: number, options?: { verbose?: boolean, partial?: boolean} ): number[] {
-//         const { verbose = false, partial = false} = options || {}; //Defaults
-//         const pids: number[] = [];
-
-//         const ramBlockSize = ns.getScriptRam(scriptName)
-//         const subset = filterServersByRamAndSubset(subsetType, ramBlockSize, ServerRamNetwork.getInstance().getAllServers());
-//         const totalRam = getTotalRam(subset);
-//         const ramToFill = Math.floor(totalRam * percentAllocation);
-//         let filledRam = 0;
-//         const hostThreads: HostToThreads = new Map();
-//         while (filledRam <= ramToFill) {
-//             let serverRamToExec = ServerRamNetwork.getInstance().updateServerWithSubset(ramBlockSize, subset); //TODO: can do way more efficiently
-//             serverRamToExec = amalgamateServerRam(serverRamToExec);
-//             if (verbose) ns.printf(`Host threads chosen: ${ServerRamToString(ns, serverRamToExec)}`);
-//             for (const hostRam of serverRamToExec) {
-//                 const threads = getFreeRAM(ns, hostRam.serverName) - hostRam.freeRam / ramBlockSize; // (actualFree - simulatedFree = ramToUse) / blockSize
-//                 filledRam += hostRam.freeRam;
-//                 hostThreads.set(hostRam.serverName, (hostThreads.get(hostRam.serverName) || 0) + threads); //update threadcount
-//             }
-//         }
-//         hostThreads.forEach((threads: number, hostname: string) => {
-//             pids.unshift(ns.exec(scriptName, hostname, threads));
-//         });
-//         return pids;
-
-//     }
-
-//     //combine same server + ram together
-//     function amalgamateServerRam(serverRam: ServerRam[]) {
-//         const serverMap = new Map<string, number>();
-
-//         // Aggregate freeRam for each serverName
-//         for (const server of serverRam) {
-//             serverMap.set(
-//                 server.serverName,
-//                 (serverMap.get(server.serverName) || 0) + server.freeRam
-//             );
-//         }
-
-//         // Convert the map back to an array of ServerRam objects
-//         return Array.from(serverMap.entries()).map(([serverName, freeRam]) => ({
-//             serverName,
-//             freeRam,
-//         }));
-//     }
-
-//     function getTotalRam(serverRam: ServerRam[]): number {
-//         return serverRam.reduce((total, server) => total + server.freeRam, 0);
-//     }
-
-//     function getThreadsFromRam(totalRam: number, ramBlock: number) {
-//         return totalRam / ramBlock;
-//     }
-
-//     // function execMultiple(ns: NS, script: string, serverType: ServerSubset, options?: { usagePercent?: number, threads?: number; partial?: boolean }) {
-//     //     const { usagePercent = 1, threads = 1, partial = false } = options || {}; // Default values
-//     //     const hostThreads: HostToThreads = RamNetwork.getHostsFromNetwork(ns, script, serverType, usagePercent, partial);
-//     //     hostThreads.forEach((threads: number, hostname: string) => {
-//     //         ns.exec(script, hostname, threads); //TODO: args
-//     //     });
-
-//     // }
-
-
-
-//     export function execScript(ns: NS, scriptName: string, threads: number, serverSubset: ServerSubset, options?: { verbose?: boolean, partial?: boolean} ): number[] {
-//         const scriptThreads = [{scriptName: scriptName, ramBlockSize: ns.getScriptRam(scriptName) * threads, threads: threads}]; //array of 1 object only
-//         return execScripts(ns, scriptThreads, serverSubset, options);
-//     }
-
-//     //TODO: implement partial
-
-//     //TODO: debug, maybe rethink underlying data structure even? just go simple {name: freeRam} ordered map?
-
-//     // Executes a set of scripts on the smallest servers possible (based on subset), and returns the pids
-//     // ex: RamNetwork.execMult(ns, {Const.HWG.Hack.Script_Loc, getRamBlock(threads), threads}, ServerSubset.NOT_OWNED) --> will exec hack block
-//     export function execScripts(ns: NS, scriptThreads: {scriptName: string, ramBlockSize: number, threads: number}[], serverSubset: ServerSubset, options?: { verbose?: boolean, partial?: boolean} ): number[] {
-//         const { verbose = false, partial = false} = options || {}; //Defaults
-//         const minRamBlock = Math.min(...scriptThreads.map(script => script.ramBlockSize));
-//         if (verbose) ns.printf(`${ServerRamNetwork.getInstance().getPrintString(ns)}`);
-//         if (verbose) ns.printf(`\n\nMin Ram: ${ns.formatRam(minRamBlock)}`);
-//         const pids: number[] = [];
-//         for (const scriptInput of scriptThreads) {
-//             if (verbose) ns.printf(`\n\nScript: ${scriptInput.scriptName} | Ram: ${ns.formatRam(scriptInput.ramBlockSize)} | Threads: ${ns.formatNumber(scriptInput.threads)}`);
-//             const subset = filterServersByRamAndSubset(serverSubset, minRamBlock, ServerRamNetwork.getInstance().getAllServers());
-//             if (verbose) ns.printf(`Subset: ${ServerRamToString(ns, subset)}`)
-//             const hostThreads = ServerRamNetwork.getInstance().updateServerWithSubset(scriptInput.ramBlockSize, subset, 1);
-//             if (verbose) ns.printf(`Host threads chosen: ${ServerRamToString(ns, hostThreads)}`);
-//             for (const hostRam of hostThreads) {
-//                 if (verbose) ns.printf(`Attempt to exec: ${scriptInput.scriptName} on ${hostRam.serverName} with ${scriptInput.threads}`);
-//                 pids.unshift(ns.exec(scriptInput.scriptName, hostRam.serverName, scriptInput.threads));
-//             }
-//         }
-//         return pids;
-//     }
-
-//     function ServerRamToString(ns: NS, serverRam: ServerRam[]): string {
-//         return serverRam
-//             .map(sr => `Server: ${sr.serverName}, Free RAM: ${ns.formatRam(sr.freeRam)}`)
-//             .join("\n");
-//     }
-
-// }

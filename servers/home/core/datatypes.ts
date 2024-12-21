@@ -1,123 +1,6 @@
 import { ScriptArg, Server } from "@/NetscriptDefinitions";
 import { HWGW_CONSTANTS, HWGW_TYPE, HWGW_TYPES } from "./constants";
 
-// export class HWGW_ThreadCounts {
-//     constructor(
-//         public hack: number = 0,
-//         public weaken1: number = 0,
-//         public grow: number = 0,
-//         public weaken2: number = 0,
-//     ) {};
-//     print(ns: NS) {
-//         ns.printf(`Hack Threads:    ${this.hack}`);
-//         ns.printf(`Weaken1 Threads: ${this.weaken1}`);
-//         ns.printf(`Grow Threads:    ${this.grow}`);
-//         ns.printf(`Weaken2 Threads: ${this.weaken2}`);
-//     }
-// }
-
-// export class HWGW_StartEndTimes {
-//     // Define an index signature that enforces the keys must be from HWGW_TYPE
-//     [key: string]: { start: number; end: number };
-//     private times: { [key in HWGW_TYPE]: { start: number; end: number } };
-
-//     constructor() {
-//         // Use Object.values to iterate over the enum and dynamically initialize the fields
-//         for (const type of Object.values(HWGW_TYPE)) {
-//             this[type] = { start: 0, end: 0 }; // Initialize each key with default values
-//         }
-//     }
-
-//     //@ts-expect-error
-//     print(ns: NS): void {
-//         // Use Object.values to dynamically iterate through valid keys
-//         for (const type of Object.values(HWGW_TYPE)) {
-//             const { start, end } = this[type];
-//             ns.printf(
-//                 `${type}: ${ns.tFormat(start, true)} -> ${ns.tFormat(end, true)}: (${ns.tFormat(
-//                     end - start,
-//                     true
-//                 )})`
-//             );
-//         }
-//     }
-// }
-
-
-
-
-// export class HWGW_StartEndTimes {
-//     // Define the structure as a Record with keys from HWGW_TYPE
-//     private times: Record<HWGW_TYPE, { start: number; end: number }>;
-
-//     constructor() {
-//         this.times = {
-//             [HWGW_TYPE.hack]: { start: 0, end: 0 },
-//             [HWGW_TYPE.weaken1]: { start: 0, end: 0 },
-//             [HWGW_TYPE.grow]: { start: 0, end: 0 },
-//             [HWGW_TYPE.weaken2]: { start: 0, end: 0 },
-//         };
-//     }
-
-//     // Accessor to ensure strict typing
-//     get(key: HWGW_TYPE): { start: number; end: number } {
-//         return this.times[key];
-//     }
-
-//     // Mutator to update values
-//     set(key: HWGW_TYPE, start: number, end: number): void {
-//         this.times[key] = { start, end };
-//     }
-
-//     print(ns: NS): void {
-//         for (const [type, { start, end }] of Object.entries(this.times) as [HWGW_TYPE, { start: number; end: number }][]) {
-//             ns.printf(
-//                 `${type}: ${ns.tFormat(start, true)} -> ${ns.tFormat(end, true)}: (${ns.tFormat(
-//                     end - start,
-//                     true
-//                 )})`
-//             );
-//         }
-//     }
-// }
-
-
-// export class HWGW_RamBlocks {
-//     threadCounts: HWGW_ThreadCounts;
-//     hackRamBlock: number;
-//     weaken1RamBlock: number;
-//     growRamBlock: number;
-//     weaken2RamBlock: number;
-//     constructor(threadCounts: HWGW_ThreadCounts) {
-//         this.threadCounts = threadCounts;
-//         this.hackRamBlock = this.threadCounts.hack * HWGW_CONSTANTS.hack.RAM_COST;
-//         this.weaken1RamBlock = this.threadCounts.weaken1 * HWGW_CONSTANTS.weaken1.RAM_COST;
-//         this.growRamBlock = this.threadCounts.grow * HWGW_CONSTANTS.grow.RAM_COST;
-//         this.weaken2RamBlock = this.threadCounts.weaken2 * HWGW_CONSTANTS.weaken2.RAM_COST;
-//     };
-//     print(ns: NS) {
-//         ns.printf(`Hack RAM block size:    ${ns.formatRam(this.hackRamBlock)}`);
-//         ns.printf(`Weaken1 RAM block size: ${ns.formatRam(this.weaken1RamBlock)}`);
-//         ns.printf(`Grow RAM block size:    ${ns.formatRam(this.growRamBlock)}`);
-//         ns.printf(`Weaken2 RAM block size: ${ns.formatRam(this.weaken2RamBlock)}`);
-//     }
-// }
-
-//TODO: extend Job base instead
-// export class HWGW_Job {
-//     constructor (
-//         public hwgw_type: typeof HWGW_TYPES[number], //h, w1, g, w2
-//         public threads: number,
-//         public startTime: number,
-//         public endTime: number,
-//         public ramBlock: number, //size
-//         public host: string,
-//     ) {};
-//     print(ns: NS) {
-//         ns.print(`Running job ${this.hwgw_type} with ${this.threads} threads (${ns.formatRam(this.ramBlock)}) on ${this.host} from ${ns.tFormat(this.startTime, true)} to ${ns.tFormat(this.endTime, true)}`);
-//     }
-// }
-
 //TODO: keep?
 // export type HackTimeTypes = {
 //     hack: number;
@@ -185,11 +68,11 @@ export class HWGW_Data {
     }
 
     // Sub-value setters
-    setStartTime(type: HWGW_TYPE, start: number): void {
+    setTimeStart(type: HWGW_TYPE, start: number): void {
         this.times[type].start = start;
     }
 
-    setEndTime(type: HWGW_TYPE, end: number): void {
+    setTimeEnd(type: HWGW_TYPE, end: number): void {
         this.times[type].end = end;
     }
 }
@@ -239,6 +122,10 @@ export class Job {
     setPID(pid: number) {
         this.pid = pid;
     }
+
+    getRamBlockSize(ns: NS) {
+        return ns.getScriptRam(this.getScriptName()) * this.threadCount;
+    }
 }
 
 
@@ -255,24 +142,41 @@ export class HWGW_Single_Job extends Job {
         super(scriptName, data.getThreadInfo(hwgw_type).threadCount, [targetServer, data.getRunTimes(hwgw_type).start, data.getRunTimes(hwgw_type).end], hostname, pid);
     }
 
-    //update/sync thread data when updating data, as it is stored in two places
+    //IMPORTANT: update/sync thread data when updating data, as it is stored in two places
     updateThreadCount(threadCount: number) {
-        this.data.setThreads(this.hwgw_type, threadCount);
+        this.data.setThreads(this.hwgw_type, threadCount); //updates ramBlockSize too
         this.setThreadCount(threadCount);
     }
-
-    getHWGWtype(): HWGW_TYPE {
-        return this.hwgw_type;
-    }
-
     getData(): HWGW_Data {
         return this.data;
     }
     setData(data: HWGW_Data) {
         this.data = data;
-        this.updateThreadCount(data.getThreadInfo(this.hwgw_type).threadCount)
+        this.updateThreadCount(data.getThreadInfo(this.hwgw_type).threadCount);
+    }
+    getRamBlockSize(): number {
+        return this.getData().getThreadInfo(this.getHWGWtype()).ramBlockSize;
     }
 
+    //custom
+    setTimeStart(startTime: number) {
+        this.getData().setTimeStart(this.getHWGWtype(), startTime);
+    }
+    getTimeStart(): number {
+        return this.getData().getRunTimes(this.getHWGWtype()).start;
+    }
+
+    setTimeEnd(endTime: number) {
+        this.getData().setTimeEnd(this.getHWGWtype(), endTime);
+    }
+    getTimeEnd(): number {
+        return this.getData().getRunTimes(this.getHWGWtype()).end;
+    }
+
+    //generics
+    getHWGWtype(): HWGW_TYPE {
+        return this.hwgw_type;
+    }
     getTargetServer(): string {
         return this.targetServer;
     }
