@@ -1,46 +1,50 @@
 import { ScriptArg, Server } from "@/NetscriptDefinitions";
 import { HWGW_CONSTANTS, HWGW_TYPE, HWGW_TYPES } from "./constants";
 
-export class HWGW_ThreadCounts {
-    constructor(
-        public hack: number = 0,
-        public weaken1: number = 0,
-        public grow: number = 0,
-        public weaken2: number = 0,
-    ) {};
-    print(ns: NS) {
-        ns.printf(`Hack Threads:    ${this.hack}`);
-        ns.printf(`Weaken1 Threads: ${this.weaken1}`);
-        ns.printf(`Grow Threads:    ${this.grow}`);
-        ns.printf(`Weaken2 Threads: ${this.weaken2}`);
-    }
-}
+// export class HWGW_ThreadCounts {
+//     constructor(
+//         public hack: number = 0,
+//         public weaken1: number = 0,
+//         public grow: number = 0,
+//         public weaken2: number = 0,
+//     ) {};
+//     print(ns: NS) {
+//         ns.printf(`Hack Threads:    ${this.hack}`);
+//         ns.printf(`Weaken1 Threads: ${this.weaken1}`);
+//         ns.printf(`Grow Threads:    ${this.grow}`);
+//         ns.printf(`Weaken2 Threads: ${this.weaken2}`);
+//     }
+// }
 
-export type HackTimes = {
-    hack: number;
-    grow: number;
-    weaken: number;
-}
+// export class HWGW_StartEndTimes {
+//     // Define an index signature that enforces the keys must be from HWGW_TYPE
+//     [key: string]: { start: number; end: number };
+//     private times: { [key in HWGW_TYPE]: { start: number; end: number } };
 
-export class HWGW_StartEndTimes {
-    // Define types dynamically based on HWGW_CONSTANTS
-    [key: string]: { start: number; end: number };
+//     constructor() {
+//         // Use Object.values to iterate over the enum and dynamically initialize the fields
+//         for (const type of Object.values(HWGW_TYPE)) {
+//             this[type] = { start: 0, end: 0 }; // Initialize each key with default values
+//         }
+//     }
 
-    constructor() {
-        for (const type of HWGW_TYPES) {
-            this[type] = { start: 0, end: 0 }; // Default start and end values
-        }
-    }
+//     //@ts-expect-error
+//     print(ns: NS): void {
+//         // Use Object.values to dynamically iterate through valid keys
+//         for (const type of Object.values(HWGW_TYPE)) {
+//             const { start, end } = this[type];
+//             ns.printf(
+//                 `${type}: ${ns.tFormat(start, true)} -> ${ns.tFormat(end, true)}: (${ns.tFormat(
+//                     end - start,
+//                     true
+//                 )})`
+//             );
+//         }
+//     }
+// }
 
-    //@ts-ignore (due to dynamic assignment)
-    print(ns: NS): void {
-        for (const type of HWGW_TYPES) {
-            const { start, end } = this[type];
-            ns.printf(`${type}: ${ns.tFormat(start, true)} -> ${ns.tFormat(end, true)}: (${ns.tFormat(end - start, true)})`);
-        }
-    }
-    
-}
+
+
 
 // export class HWGW_StartEndTimes {
 //     // Define the structure as a Record with keys from HWGW_TYPE
@@ -78,97 +82,329 @@ export class HWGW_StartEndTimes {
 // }
 
 
-export class HWGW_RamBlocks {
-    threadCounts: HWGW_ThreadCounts;
-    hackRamBlock: number;
-    weaken1RamBlock: number;
-    growRamBlock: number;
-    weaken2RamBlock: number;
-    constructor(threadCounts: HWGW_ThreadCounts) {
-        this.threadCounts = threadCounts;
-        this.hackRamBlock = this.threadCounts.hack * HWGW_CONSTANTS.hack.RAM_COST;
-        this.weaken1RamBlock = this.threadCounts.weaken1 * HWGW_CONSTANTS.weaken1.RAM_COST;
-        this.growRamBlock = this.threadCounts.grow * HWGW_CONSTANTS.grow.RAM_COST;
-        this.weaken2RamBlock = this.threadCounts.weaken2 * HWGW_CONSTANTS.weaken2.RAM_COST;
-    };
-    print(ns: NS) {
-        ns.printf(`Hack RAM block size:    ${ns.formatRam(this.hackRamBlock)}`);
-        ns.printf(`Weaken1 RAM block size: ${ns.formatRam(this.weaken1RamBlock)}`);
-        ns.printf(`Grow RAM block size:    ${ns.formatRam(this.growRamBlock)}`);
-        ns.printf(`Weaken2 RAM block size: ${ns.formatRam(this.weaken2RamBlock)}`);
+// export class HWGW_RamBlocks {
+//     threadCounts: HWGW_ThreadCounts;
+//     hackRamBlock: number;
+//     weaken1RamBlock: number;
+//     growRamBlock: number;
+//     weaken2RamBlock: number;
+//     constructor(threadCounts: HWGW_ThreadCounts) {
+//         this.threadCounts = threadCounts;
+//         this.hackRamBlock = this.threadCounts.hack * HWGW_CONSTANTS.hack.RAM_COST;
+//         this.weaken1RamBlock = this.threadCounts.weaken1 * HWGW_CONSTANTS.weaken1.RAM_COST;
+//         this.growRamBlock = this.threadCounts.grow * HWGW_CONSTANTS.grow.RAM_COST;
+//         this.weaken2RamBlock = this.threadCounts.weaken2 * HWGW_CONSTANTS.weaken2.RAM_COST;
+//     };
+//     print(ns: NS) {
+//         ns.printf(`Hack RAM block size:    ${ns.formatRam(this.hackRamBlock)}`);
+//         ns.printf(`Weaken1 RAM block size: ${ns.formatRam(this.weaken1RamBlock)}`);
+//         ns.printf(`Grow RAM block size:    ${ns.formatRam(this.growRamBlock)}`);
+//         ns.printf(`Weaken2 RAM block size: ${ns.formatRam(this.weaken2RamBlock)}`);
+//     }
+// }
+
+//TODO: extend Job base instead
+// export class HWGW_Job {
+//     constructor (
+//         public hwgw_type: typeof HWGW_TYPES[number], //h, w1, g, w2
+//         public threads: number,
+//         public startTime: number,
+//         public endTime: number,
+//         public ramBlock: number, //size
+//         public host: string,
+//     ) {};
+//     print(ns: NS) {
+//         ns.print(`Running job ${this.hwgw_type} with ${this.threads} threads (${ns.formatRam(this.ramBlock)}) on ${this.host} from ${ns.tFormat(this.startTime, true)} to ${ns.tFormat(this.endTime, true)}`);
+//     }
+// }
+
+//TODO: keep?
+// export type HackTimeTypes = {
+//     hack: number;
+//     grow: number;
+//     weaken: number;
+// }
+
+export type HWGW_RunTimes = {
+    start: number;
+    end: number;
+}
+
+export type HWGW_ThreadInfo = {
+    threadCount: number; 
+    ramBlockSize: number; 
+}
+
+export class HWGW_Data {
+    private times: { [key in HWGW_TYPE]: HWGW_RunTimes };
+    private threads: { [key in HWGW_TYPE]: HWGW_ThreadInfo };
+
+    constructor() {
+        // Initialize times and threads for each HWGW_TYPE with default values
+        this.times = Object.values(HWGW_TYPE).reduce((time, type) => {
+            time[type] = { start: 0, end: 0 };
+            return time;
+        }, {} as { [key in HWGW_TYPE]: HWGW_RunTimes });
+
+        this.threads = Object.values(HWGW_TYPE).reduce((thread, type) => {
+            thread[type] = { threadCount: 0, ramBlockSize: 0 };
+            return thread;
+        }, {} as { [key in HWGW_TYPE]: HWGW_ThreadInfo });
+    }
+
+    print(ns: NS): void {
+        ns.printf(`HWGW Data:\n${"-".repeat(30)}`);
+        for (const type of Object.values(HWGW_TYPE)) {
+            const { start, end } = this.times[type];
+            const { threadCount, ramBlockSize } = this.threads[type];
+            ns.printf(
+                `${type.toUpperCase()}:\n` +
+                `  Times: ${ns.tFormat(start, true)} -> ${ns.tFormat(end, true)} (${ns.tFormat(end - start, true)})\n` +
+                `  Threads: ${threadCount}, RAM Block Size: ${ns.formatRam(ramBlockSize)}`
+            );
+        }
+    }
+
+    // Accessors for specific types
+    getRunTimes(type: HWGW_TYPE): HWGW_RunTimes {
+        return this.times[type];
+    }
+
+    getThreadInfo(type: HWGW_TYPE): HWGW_ThreadInfo {
+        return this.threads[type];
+    }
+
+    // Mutators for specific types
+    setTimes(type: HWGW_TYPE, start: number, end: number): void {
+        this.times[type] = { start, end };
+    }
+
+    setThreads(type: HWGW_TYPE, threadCount: number): void {
+        this.threads[type].threadCount = threadCount;
+        this.threads[type].ramBlockSize = threadCount * HWGW_CONSTANTS[type].RAM_COST;
+    }
+
+    // Sub-value setters
+    setStartTime(type: HWGW_TYPE, start: number): void {
+        this.times[type].start = start;
+    }
+
+    setEndTime(type: HWGW_TYPE, end: number): void {
+        this.times[type].end = end;
     }
 }
 
+//TODO: getters/setters for everything, just enforce it
 export class Job {
     constructor (
-        public scriptName: string,
-        public threads: number = 1,
-        public args: ScriptArg[] = [],
-        public hostname?: string,
-        public pid?: number,
+        private scriptName: string,
+        private threadCount: number = 1,
+        private args: ScriptArg[] = [],
+        private hostname?: string,
+        private pid?: number,
     ) {};
     print(ns: NS) {
-        ns.printf(`JOB: ${this.scriptName} with ${this.threads} threads and args [${this.args}] on ${this?.hostname}`);
+        ns.printf(`Running JOB: ${this.scriptName} with ${this.threadCount} threads and args [${this.args}] on ${this?.hostname} with PID ${this?.pid}`);
+    }
+    //Need getter/setter because this can mutate elsewhere
+    getThreadCount(){
+        return this.threadCount;
+    }
+    setThreadCount(threadCount: number) {
+        this.threadCount = threadCount;
+    }
+
+    //Generic getters/setters
+    getScriptName() {
+        return this.scriptName;
+    }
+
+    getArgs(): ScriptArg[] {
+        return this.args;
+    }
+    setArgs(args: ScriptArg[]) {
+        this.args = args;
+    }
+
+    getHostname() {
+        return this?.hostname;
+    }
+    setHostname(hostname: string) {
+        this.hostname = hostname;
+    }
+
+    getPID(){
+        return this?.pid;
+    }
+    setPID(pid: number) {
+        this.pid = pid;
     }
 }
 
-//redo all these classes
-export class Batch_Job extends Job {
+
+export class HWGW_Single_Job extends Job {
     constructor(
         scriptName: string,
-        threads: number = 1,
-        public hwgw_type: HWGW_TYPE, // Define the HWGW type
-        public targetServer: string,
-        public startTime: number,
-        public endTime: number,
+        private hwgw_type: HWGW_TYPE, // Define the HWGW type
+        private data: HWGW_Data,
+        private targetServer: string,
         hostname?: string,
         pid?: number,
     ) {
-        // Automatically set args to [startTime, endTime]
-        super(scriptName, threads, [targetServer, startTime, endTime], hostname, pid);
+        // Automatically set args to [target, startTime, endTime]
+        super(scriptName, data.getThreadInfo(hwgw_type).threadCount, [targetServer, data.getRunTimes(hwgw_type).start, data.getRunTimes(hwgw_type).end], hostname, pid);
+    }
+
+    //update/sync thread data when updating data, as it is stored in two places
+    updateThreadCount(threadCount: number) {
+        this.data.setThreads(this.hwgw_type, threadCount);
+        this.setThreadCount(threadCount);
+    }
+
+    getHWGWtype(): HWGW_TYPE {
+        return this.hwgw_type;
+    }
+
+    getData(): HWGW_Data {
+        return this.data;
+    }
+    setData(data: HWGW_Data) {
+        this.data = data;
+        this.updateThreadCount(data.getThreadInfo(this.hwgw_type).threadCount)
+    }
+
+    getTargetServer(): string {
+        return this.targetServer;
+    }
+    setTargetServer(target: string) {
+        this.targetServer = target;
     }
 
     print(ns: NS): void {
         super.print(ns); // Call the parent class's print method
+        const times = this.data.getRunTimes(this.hwgw_type);
         ns.printf(
-            `Batch Type: ${this.hwgw_type}, Start Time: ${this.startTime}, End Time: ${this.endTime}`
+            `HWGW DETAILS\nTarget: ${this.targetServer}, Hack Type: ${this.hwgw_type}, RamBlockSize: ${ns.formatRam(this.data.getThreadInfo(this.hwgw_type).ramBlockSize)}, Start Time: ${times.start}, End Time: ${times.end}`
         );
     }
 }
 
-//TODO: extend Job base instead
-export class HWGW_Job {
+export type JobMap = { [key in HWGW_TYPE]: HWGW_Single_Job };
+
+export class HWGW_Jobs {
     constructor (
-        public hwgw_type: typeof HWGW_TYPES[number], //h, w1, g, w2
-        public threads: number,
-        public startTime: number,
-        public endTime: number,
-        public ramBlock: number, //size
-        public host: string,
+        private target: string,
+        private leechPercent: number,
+        private jobs: JobMap,
     ) {};
+    //Helper method(s)
+    getTotalRam(): number {
+        return Object.values(this.jobs).reduce((total, job) => total + job.getData().getThreadInfo(job.getHWGWtype()).ramBlockSize, 0);
+    }
+    //Getters and setters (simple)
+    getTarget(): string {
+        return this.target;
+    }
+    setTarget(target: string) {
+        this.target = target;
+    }
+
+    getLeechPercent(): number {
+        return this.leechPercent;
+    }
+    setLeechPercent(leechPercent: number) {
+        this.leechPercent = leechPercent;
+    }
+
+    getJobs(): JobMap {
+        return this.jobs;
+    }
+    setJobs(jobMap: JobMap) {
+        this.jobs = jobMap;
+    }
+    setJob(type: HWGW_TYPE, job: HWGW_Single_Job) {
+        this.jobs[type] = job;
+    }
+    //Print
     print(ns: NS) {
-        ns.print(`Running job ${this.hwgw_type} with ${this.threads} threads (${ns.formatRam(this.ramBlock)}) on ${this.host} from ${ns.tFormat(this.startTime, true)} to ${ns.tFormat(this.endTime, true)}`);
+        ns.print(`Attempting to leech ${ns.formatPercent(this.leechPercent)} from ${this.target}`);
+        ns.print(`--Total RAM Needed--`)
+        ns.print(ns.formatRam(this.getTotalRam()));
     }
 }
 
+export type HWGW_BATCH_SCHEDULE_TYPES = 'SHOTGUN' | 'JIT';
+
 export class HWGW_Batch {
-    constructor (
-        public target: string,
-        public leechPercent: number,
-        public threads: HWGW_ThreadCounts, //TODO: refactor to just be job[]?
-        public timings: HWGW_StartEndTimes,
-        public ramBlocks: HWGW_RamBlocks,
+    constructor(
+        private target: string,
+        private allJobs: HWGW_Jobs[],
+        private batchType: HWGW_BATCH_SCHEDULE_TYPES,
+        private batchBufferMS: number,
+        private targetHostsRamUse: number,
     ) {};
-    print(ns: NS) {
-        ns.print(`Attempting to leech ${ns.formatPercent(this.leechPercent)} from ${this.target}`);
-        ns.print(`--RAM--`)
-        this.ramBlocks.print(ns);
-        ns.print(`--Threads--`)
-        this.threads.print(ns);
-        ns.print(`--Timing--`)
-        this.timings.print(ns);
+
+    // Getters & Setters
+    getTarget(): string {
+        return this.target;
+    }
+    setTarget(target: string) {
+        this.target = target;
+    }
+
+    getAllJobs(): HWGW_Jobs[] {
+        return this.allJobs;
+    }
+    setAllJobs(allJobs: HWGW_Jobs[]) {
+        this.allJobs = allJobs;
+    }
+
+    getBatchType(): HWGW_BATCH_SCHEDULE_TYPES {
+        return this.batchType;
+    }
+    setBatchType(batchType: HWGW_BATCH_SCHEDULE_TYPES) {
+        this.batchType = batchType;
+    }
+
+    getBatchBufferMS(): number {
+        return this.batchBufferMS;
+    }
+    setBatchBufferMS(batchBufferMS: number) {
+        this.batchBufferMS = batchBufferMS;
+    }
+
+    getTargetHostsRamUse(): number {
+        return this.targetHostsRamUse;
+    }
+    setTargetHostsRamUse(targetHostsRamUse: number) {
+        this.targetHostsRamUse = targetHostsRamUse;
+    }
+
+    // Helper Methods
+    getTotalBatchRam(): number {
+        return this.allJobs.reduce((total, jobSet) => total + jobSet.getTotalRam(), 0);
+    }
+
+    getJobsForType(type: HWGW_TYPE): HWGW_Single_Job[] {
+        return this.allJobs.map(jobSet => jobSet.getJobs()[type]).filter(job => !!job);
+    }
+
+    // Print Method
+    print(ns: NS): void {
+        ns.print(`Batch Information for Target: ${this.target}`);
+        ns.print(`Batch Type: ${this.batchType}`);
+        ns.print(`Batch Buffer: ${this.batchBufferMS}ms`);
+        ns.print(`Target Hosts RAM Use: ${ns.formatRam(this.targetHostsRamUse)}`);
+        ns.print(`-- Total RAM Usage Across Jobs --`);
+        ns.print(ns.formatRam(this.getTotalBatchRam()));
+
+        for (const [index, jobSet] of this.allJobs.entries()) {
+            ns.print(`Job Set #${index + 1}:`);
+            jobSet.print(ns);
+        }
     }
 }
+
 
 export type MathRoundType = Math["floor"] | Math["ceil"] | null;
 
@@ -230,34 +466,6 @@ export class ServerRamNetwork {
         }
     }
 
-    // private filterSortInPlace(source: Server[], filterPredicates?: ((server: Server) => boolean)[], sortComparator?: (a: Server, b: Server) => number): void {
-    //     const predicates = filterPredicates || [this.filterPredicate];
-    //     const comparator = sortComparator || this.sortComparator;
-
-    //     // this.testNS.printf(`Filter Pred: ${predicates.toString}`);
-    //     const noods = source.find(s => s.hostname == 'n00dles')
-    //     // this.testNS.printf(`Noods Index: ${source.findIndex(s => s.hostname == 'n00dles')}`);
-    //     this.testNS.printf(`Noods Ram Used (internal sort): ${this.testNS.formatRam(noods.ramUsed)}`);
-    //     this.testNS.printf(`Noods Ram Sim (internal sort): ${this.testNS.formatRam(this.simulatedAddtlRamUsed.get('n00dles'))}`);
-    
-    //     // Filter elements in place
-    //     let index = 0;
-    //     while (index < source.length) {
-    //         if (!predicates.every(predicate => predicate(source[index]))) {
-    //             source.splice(index, 1); // Remove elements not matching predicates
-    //         } else {
-    //             index++;
-    //         }
-    //     }
-
-    //     // this.testNS.printf(`Noods Index 2: ${source.findIndex(s => s.hostname == 'n00dles')}`);
-    
-    //     // Sort remaining elements
-    //     source.sort(comparator);
-    //     // this.testNS.printf(`Noods Index 3: ${source.findIndex(s => s.hostname == 'n00dles')}`);
-    // }
-    
-
     //---------------------- Constructor & Defaults --------------------------
 
     public constructor(serverList: Server[], sortComparator?: (a: Server, b: Server) => number, filterPredicate?: (server: Server) => boolean) {
@@ -317,54 +525,6 @@ export class ServerRamNetwork {
         this.reSort();
     }
 
-    // Update an existing server using a subset of servers and returns the updated subset, filtered and sorted
-    //TODO: more simulation
-    // private update(server: Server, serverList: Server[]): Server[] {
-    //     const subsetIndex = serverList.findIndex(s => s.hostname === server.hostname);
-
-    //     // Remove the server from both lists if it doesn't satisfy the filtering comparator
-    //     if (!this.filterPredicate(server)) {
-    //         if (subsetIndex !== -1) serverList.splice(subsetIndex, 1);
-    //         const mainIndex = this.servers.findIndex(s => s.hostname === server.hostname);
-    //         if (mainIndex !== -1) this.servers.splice(mainIndex, 1);
-
-    //         return serverList.sort(this.sortComparator);
-    //     }
-
-    //     // Update the server in the subset
-    //     if (subsetIndex !== -1) {
-    //         serverList.splice(subsetIndex, 1); // Remove the old entry
-    //     }
-    //     serverList.push(server);
-
-    //     // Update the server in the main list
-    //     const mainIndex = this.servers.findIndex(s => s.hostname === server.hostname);
-    //     if (mainIndex !== -1) {
-    //         this.servers.splice(mainIndex, 1); // Remove the old entry
-    //     }
-    //     this.servers.push(server);
-
-    //     // Sort both lists by the ordering comparator
-    //     serverList.sort(this.sortComparator);
-    //     this.servers.sort(this.sortComparator);
-
-    //     return serverList;
-    // }
-
-    // // Add or update a server in the ordered set, simply unnecessary?
-    // public upsert(server: Server): void {
-    //     if (!this.filterPredicate(server)) return;
-    //     const existingIndex = this.servers.findIndex(s => s.hostname === server.hostname);
-    //     if (existingIndex !== -1) {
-    //         // Update the existing server
-    //         this.servers.splice(existingIndex, 1); // Remove the old entry
-    //     }
-    //     // Add the new server and re-sort (already filtered)
-    //     this.servers.push(server);
-    //     this.servers.sort(this.sortComparator);
-    // }
-
-
     public reSort() {
         this.reSortList(this.servers);
     }
@@ -414,31 +574,10 @@ export class ServerRamNetwork {
         );
     }
 
-    // //TODO: merge somehow, so it always includes simulated?
-    // public getNextSimulatedMatching(ramBlockMin: number): Server | undefined {
-    //     const predicate = (server: Server) => {
-    //         // Calculate effective RAM available after considering simulated usage
-    //         const simulatedUsedRam = this.simulatedAddtlRamUsed.get(server.hostname) || 0;
-    //         const effectiveFreeRam = server.maxRam - (server.ramUsed + simulatedUsedRam);
-    
-    //         // Return true if effective free RAM meets or exceeds the required block
-    //         return effectiveFreeRam >= ramBlockMin;
-    //     };
-    
-    //     // Find and return the first matching server
-    //     return this.servers.find(predicate);
-    // }
-
-    // Get all servers (may not be updated)
-    public getAllWithoutSimulated(): Server[] {
+    // Get all servers (WARNING: may not be updated with simulated or other details)
+    public getAllServersRaw(): Server[] {
         return this.servers;
     }
-
-    // // Get all servers (updated)
-    // private getAllUpdated(): Server[] {
-    //     this.reSort();
-    //     return this.servers;
-    // }
 
     //---------------------- Display --------------------------
     

@@ -251,7 +251,7 @@ export class RamNetwork {
 
     public execNetworkPercent(scriptName: string, percentFreeRamUsage: number): number {
         const scriptRamUsage = this.ns.getScriptRam(scriptName);
-        const totalFreeRam = this.network.getAllWithoutSimulated().reduce((total, server) => total + this.network.getEffectiveFreeRam(server), 0);
+        const totalFreeRam = this.network.getAllServersRaw().reduce((total, server) => total + this.network.getEffectiveFreeRam(server), 0);
         const usedRam = 0;
         const ramToFill = Math.floor(totalFreeRam * percentFreeRamUsage);
         while (usedRam <= ramToFill) {
@@ -262,7 +262,7 @@ export class RamNetwork {
 
     //Assumes ramBlockSize is the same for all
     public getTotalThreadsPossible(ramBlockSize: number): number {
-        const totalThreads = this.network.getAllWithoutSimulated().reduce((total, server) => total + Math.floor(this.network.getEffectiveFreeRam(server) / ramBlockSize), 0);
+        const totalThreads = this.network.getAllServersRaw().reduce((total, server) => total + Math.floor(this.network.getEffectiveFreeRam(server) / ramBlockSize), 0);
         return totalThreads;
     }
 
